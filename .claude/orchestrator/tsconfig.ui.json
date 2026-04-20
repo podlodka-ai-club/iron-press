@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "ui",
+    "outDir": "dist-ui",
+    "noEmit": true
+  },
+  "include": ["ui/**/*.ts"],
+  "exclude": ["node_modules", "dist", "dist-ui", ".runs", "ui/client"]
+}

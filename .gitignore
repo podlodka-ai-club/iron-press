@@ -1,0 +1,14 @@
+# ENV
+.env
+
+# Local config files
+*.local
+*.local.*
+
+# Worktrees folder
+/.worktrees
+
+# IDEs
+/.idea/
+/.zed/
+/.vscode/

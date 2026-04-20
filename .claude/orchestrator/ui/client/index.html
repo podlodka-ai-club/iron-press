@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Orchestrator</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='10' fill='%235eb3ff'/></svg>"
+    />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-left">
+        <span class="logo-dot" aria-hidden="true"></span>
+        <a class="topbar-title" href="/">Orchestrator</a>
+        <span class="topbar-sub" id="subtitle"></span>
+      </div>
+      <div class="topbar-right">
+        <input
+          id="search"
+          class="search"
+          type="search"
+          placeholder="filter runs…"
+          autocomplete="off"
+          aria-label="Filter runs"
+        />
+        <span class="topbar-hint">press <kbd>/</kbd> to focus</span>
+      </div>
+    </header>
+    <main id="root" class="root"></main>
+    <div id="drawer-backdrop" class="drawer-backdrop" hidden></div>
+    <div id="drawer" class="drawer" hidden aria-hidden="true"></div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script type="module" src="/static/app.js"></script>
+  </body>
+</html>
