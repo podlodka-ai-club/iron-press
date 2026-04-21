@@ -12,3 +12,9 @@
 /.idea/
 /.zed/
 /.vscode/
+node_modules
+dist
+.runs
+.env
+.env.local
+*.log
