@@ -92,8 +92,27 @@ Reads `.env` from project root. Key vars: `LINEAR_API_KEY` (required), `ANTHROPI
 
 Per-role budgets (model, maxTurns, budgetUsd) defined in `config.ts`. Dev agents: claude-opus-4-7, 150 turns, $12. BA/TL-design: 60 turns, ~$4–6.
 
+### Workflow engine (`src/workflow/`)
+
+A generic, Graphology-backed workflow engine for modelling control flow as a directed graph.
+
+**Core concepts:**
+- **`Node`** — processing step with `id`, `name`, `onEnter?`, `execute`, `onExit?` lifecycle hooks.
+- **`NodeStatus`** — fixed output vocabulary: `"Pass"` | `"Fail"` | `"WaitUserInput"`.
+- **Edges** — directed, labeled with the status(es) that trigger them.
+
+**Execution model:** engine calls `node.onEnter` → `node.execute` (returns a `NodeStatus`) → `node.onExit`, then follows the matching outgoing edge. `WaitUserInput` suspends immediately (no edge lookup). Run ends when no matching edge exists or `WaitUserInput` is returned.
+
+**Key exports** from `src/workflow/index.ts`:
+- `Node<TState>` / `NodeContext<TState>` — interfaces for implementing nodes
+- `WorkflowBuilder<TState>` — fluent builder: `addNode` → `addEdge` → `setInitialNode` → `build()`
+- `GraphologyEngine<TState>` — concrete `Engine` implementation; accepts `EngineHooks` and `EngineOptions` (`maxVisitsPerNode`)
+- `WorkflowError` — typed error with `kind`: `"MISSING_INITIAL_NODE"` | `"VISIT_LIMIT_EXCEEDED"` | `"VALIDATION_FAILED"`
+
 ### Testing
 
 Planner tests are fixture-driven — every branch in the decision table has at least one positive and one negative fixture in `tests/planner/fixtures.ts`. When changing `src/planner/decide.ts` or `src/state/classify.ts`, update or add fixtures there.
 
-All schemas use Zod strict validation. TypeScript is configured with strict mode + `exactOptionalPropertyTypes`.
+Workflow engine tests live in `tests/workflow/engine.test.ts` and cover: linear chains, branching, `WaitUserInput` suspension, state mutation, node/engine hooks, history recording, cycle detection, and builder validation errors.
+
+All schemas use Zod strict validation. TypeScript is configured with strict mode.

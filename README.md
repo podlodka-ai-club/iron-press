@@ -60,7 +60,69 @@ src/
 ├── stages/code/           Worktree prep + parallel dev dispatch + cleanup
 ├── sdk/                   query() wrapper, permission guards, hooks, skill loader
 ├── runs/                  Run log (NDJSON), artifacts, blockers report
+├── workflow/              Generic Graphology-backed workflow engine
 └── util/                  Logger, retry, JSON extraction
+```
+
+## Workflow engine
+
+`src/workflow/` provides a lightweight, statically-typed workflow engine backed by [Graphology](https://graphology.github.io/). Control flow is expressed as a directed graph of **nodes** connected by **status-labeled edges**.
+
+### Statuses
+
+Every node's `execute` handler returns one of three statuses:
+
+| Status | Meaning |
+|---|---|
+| `Pass` | Step succeeded — follow the `Pass` edge to the next node |
+| `Fail` | Step failed — follow the `Fail` edge, or end the run if none exists |
+| `WaitUserInput` | Execution suspended — run ends immediately, no edge is followed |
+
+### Node interface
+
+```typescript
+interface Node<TState> {
+  id: string;
+  name: string;
+  onEnter?: (ctx: NodeContext<TState>) => Promise<void>;
+  execute:  (ctx: NodeContext<TState>) => Promise<{ status: NodeStatus }>;
+  onExit?:  (ctx: NodeContext<TState>, status: NodeStatus) => Promise<void>;
+}
+```
+
+`ctx.state` is a shared mutable object — handlers write to it in place.
+
+### Building and running a workflow
+
+```typescript
+import { WorkflowBuilder, GraphologyEngine } from "./src/workflow/index.js";
+
+type State = { result: string };
+
+const workflow = new WorkflowBuilder<State>()
+  .addNode({
+    id: "fetch", name: "Fetch data",
+    execute: async (ctx) => {
+      ctx.state.result = await fetchSomething();
+      return { status: "Pass" };
+    },
+  })
+  .addNode({
+    id: "save", name: "Save result",
+    execute: async (ctx) => {
+      await save(ctx.state.result);
+      return { status: "Pass" };
+    },
+  })
+  .addEdge("fetch", "save", "Pass")
+  .setInitialNode("fetch")
+  .build();
+
+const result = await new GraphologyEngine<State>().run(
+  workflow,
+  { result: "" },
+  { onTerminate: (r) => console.log(r.finalStatus) },
+);
 ```
 
 ## Exit codes
