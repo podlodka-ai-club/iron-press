@@ -49,6 +49,7 @@ export const config = {
 
   linearApiKey: process.env.LINEAR_API_KEY ?? "",
   anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
+  githubToken: process.env.GITHUB_TOKEN ?? "",
 
   maxRunUsd: Number(process.env.MAX_RUN_USD ?? "50"),
 
