@@ -15,6 +15,7 @@ import {
   type MergePullRequestInput,
   type ListIssuesOptions,
   type ListPullRequestsOptions,
+  GitHubReviewStateSchema,
 } from "./github-contracts.js";
 
 // =============================================================================
@@ -81,7 +82,7 @@ export class GithubClient {
   }): GitHubReview {
     return {
       id: raw.id,
-      state: raw.state as GitHubReview["state"],
+      state: GitHubReviewStateSchema.parse(raw.state),
       body: raw.body,
       submittedAt: raw.submitted_at ?? null,
       author: this.mapUser(raw.user ?? null),
@@ -94,9 +95,11 @@ export class GithubClient {
 
   async fetchIssue(owner: string, repo: string, issueNumber: number): Promise<GitHubIssue> {
     return withRetry(`github.fetchIssue(${owner}/${repo}#${issueNumber})`, async () => {
-      const [issueRes, commentsRes] = await Promise.all([
+      const [issueRes, allComments] = await Promise.all([
         this.octokit.issues.get({ owner, repo, issue_number: issueNumber }),
-        this.octokit.issues.listComments({ owner, repo, issue_number: issueNumber, per_page: 100 }),
+        this.octokit.paginate(this.octokit.issues.listComments, {
+          owner, repo, issue_number: issueNumber, per_page: 100,
+        }),
       ]);
       const raw = issueRes.data;
       this.logger.debug({ owner, repo, issueNumber }, "github.fetchIssue");
@@ -108,11 +111,11 @@ export class GithubClient {
         url: raw.html_url,
         labels: (raw.labels as Array<{ id?: number; name?: string; color?: string; description?: string | null }>).map((l) => this.mapLabel(l)),
         author: this.mapUser(raw.user),
-        assignees: (raw.assignees ?? []).map((a) => this.mapUser(a)!),
+        assignees: (raw.assignees ?? []).flatMap((a) => { const u = this.mapUser(a); return u ? [u] : []; }),
         createdAt: raw.created_at,
         updatedAt: raw.updated_at,
         closedAt: raw.closed_at ?? null,
-        comments: commentsRes.data.map((c) => this.mapComment(c)),
+        comments: allComments.map((c) => this.mapComment(c)),
         pullRequestUrl: raw.pull_request?.html_url ?? null,
       };
     });
@@ -130,11 +133,25 @@ export class GithubClient {
         page: options.page ?? 1,
       });
       this.logger.debug({ owner, repo, count: res.data.length }, "github.listIssues");
-      return Promise.all(
-        res.data
-          .filter((i) => !i.pull_request)
-          .map((i) => this.fetchIssue(owner, repo, i.number)),
-      );
+      // Map list response directly — avoids N+1 fetches. comments are not included;
+      // call fetchIssue when you need the full comment thread.
+      return res.data
+        .filter((i) => !i.pull_request)
+        .map((i) => ({
+          number: i.number,
+          title: i.title,
+          body: i.body ?? null,
+          state: (i.state === "closed" ? "closed" : "open") as GitHubIssue["state"],
+          url: i.html_url,
+          labels: (i.labels as Array<{ id?: number; name?: string; color?: string; description?: string | null }>).map((l) => this.mapLabel(l)),
+          author: this.mapUser(i.user),
+          assignees: (i.assignees ?? []).flatMap((a) => { const u = this.mapUser(a); return u ? [u] : []; }),
+          createdAt: i.created_at,
+          updatedAt: i.updated_at,
+          closedAt: i.closed_at ?? null,
+          comments: [] as GitHubComment[],
+          pullRequestUrl: i.pull_request?.html_url ?? null,
+        }));
     });
   }
 
@@ -189,10 +206,15 @@ export class GithubClient {
 
   async fetchPullRequest(owner: string, repo: string, prNumber: number): Promise<GitHubPullRequest> {
     return withRetry(`github.fetchPullRequest(${owner}/${repo}#${prNumber})`, async () => {
-      const [prRes, commentsRes, reviewsRes] = await Promise.all([
+      const [prRes, allComments, allReviews] = await Promise.all([
         this.octokit.pulls.get({ owner, repo, pull_number: prNumber }),
-        this.octokit.issues.listComments({ owner, repo, issue_number: prNumber, per_page: 100 }),
-        this.octokit.pulls.listReviews({ owner, repo, pull_number: prNumber, per_page: 100 }),
+        // GitHub uses the Issues API for PR comments
+        this.octokit.paginate(this.octokit.issues.listComments, {
+          owner, repo, issue_number: prNumber, per_page: 100,
+        }),
+        this.octokit.paginate(this.octokit.pulls.listReviews, {
+          owner, repo, pull_number: prNumber, per_page: 100,
+        }),
       ]);
       const raw = prRes.data;
       this.logger.debug({ owner, repo, prNumber }, "github.fetchPullRequest");
@@ -215,12 +237,15 @@ export class GithubClient {
         baseBranch: raw.base.ref,
         labels: raw.labels.map((l) => this.mapLabel(l)),
         author: this.mapUser(raw.user),
-        assignees: (raw.assignees ?? []).map((a) => this.mapUser(a)!),
+        assignees: (raw.assignees ?? []).flatMap((a) => { const u = this.mapUser(a); return u ? [u] : []; }),
         requestedReviewers: (raw.requested_reviewers ?? [])
           .filter((r) => "login" in r && typeof r.login === "string")
-          .map((r) => this.mapUser(r as { login: string; id: number; avatar_url: string; html_url: string })!),
-        reviews: reviewsRes.data.map((r) => this.mapReview(r)),
-        comments: commentsRes.data.map((c) => this.mapComment(c)),
+          .flatMap((r) => {
+            const u = this.mapUser(r as { login: string; id: number; avatar_url: string; html_url: string });
+            return u ? [u] : [];
+          }),
+        reviews: allReviews.map((r) => this.mapReview(r)),
+        comments: allComments.map((c) => this.mapComment(c)),
         createdAt: raw.created_at,
         updatedAt: raw.updated_at,
         closedAt: raw.closed_at ?? null,
@@ -241,7 +266,43 @@ export class GithubClient {
         page: options.page ?? 1,
       });
       this.logger.debug({ owner, repo, count: res.data.length }, "github.listPullRequests");
-      return Promise.all(res.data.map((pr) => this.fetchPullRequest(owner, repo, pr.number)));
+      // Map list response directly — avoids N+1 fetches. reviews and comments are not included;
+      // call fetchPullRequest when you need the full thread or mergeable status.
+      return res.data.map((pr) => {
+        // List endpoint uses merged_at instead of a merged flag; state is "open"|"closed" only
+        let state: GitHubPullRequest["state"] = "open";
+        if (pr.merged_at) state = "merged";
+        else if (pr.state === "closed") state = "closed";
+
+        return {
+          number: pr.number,
+          title: pr.title,
+          body: pr.body ?? null,
+          state,
+          url: pr.html_url,
+          isDraft: pr.draft ?? false,
+          isMerged: !!pr.merged_at,
+          mergedAt: pr.merged_at ?? null,
+          headBranch: pr.head.ref,
+          headSha: pr.head.sha,
+          baseBranch: pr.base.ref,
+          labels: pr.labels.map((l) => this.mapLabel(l)),
+          author: this.mapUser(pr.user),
+          assignees: (pr.assignees ?? []).flatMap((a) => { const u = this.mapUser(a); return u ? [u] : []; }),
+          requestedReviewers: (pr.requested_reviewers ?? [])
+            .filter((r) => "login" in r && typeof r.login === "string")
+            .flatMap((r) => {
+              const u = this.mapUser(r as { login: string; id: number; avatar_url: string; html_url: string });
+              return u ? [u] : [];
+            }),
+          reviews: [] as GitHubReview[],
+          comments: [] as GitHubComment[],
+          createdAt: pr.created_at,
+          updatedAt: pr.updated_at,
+          closedAt: pr.closed_at ?? null,
+          mergeable: null,
+        };
+      });
     });
   }
 
@@ -286,7 +347,7 @@ export class GithubClient {
     repo: string,
     prNumber: number,
     input: MergePullRequestInput = {},
-  ): Promise<{ merged: boolean; sha: string; message: string }> {
+  ): Promise<{ merged: boolean; sha: string | null; message: string }> {
     return withRetry(`github.mergePullRequest(${owner}/${repo}#${prNumber})`, async () => {
       const res = await this.octokit.pulls.merge({
         owner,
@@ -299,7 +360,7 @@ export class GithubClient {
       this.logger.info({ owner, repo, prNumber, merged: res.data.merged }, "github.mergePullRequest");
       return {
         merged: res.data.merged,
-        sha: res.data.sha ?? "",
+        sha: res.data.sha ?? null,
         message: res.data.message,
       };
     });
