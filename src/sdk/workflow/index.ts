@@ -31,3 +31,13 @@ export { WorkflowBuilder } from "./builder.js";
 
 // Concrete engine
 export { GraphologyEngine } from "./engine.js";
+
+// Workflow registry
+export {
+  WORKFLOWS,
+  DEFAULT_WORKFLOW,
+  availableWorkflowNames,
+  getWorkflow,
+  type WorkflowState,
+  type WorkflowFactory,
+} from "./registry.js";

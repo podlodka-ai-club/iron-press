@@ -1,76 +1,123 @@
 #!/usr/bin/env node
 import { Command } from "commander";
-import { orchestrate } from "./orchestrator.js";
-import { FlagsSchema } from "./types/contracts.js";
-import { logger } from "./util/logger.js";
+import {
+  GraphologyEngine,
+  DEFAULT_WORKFLOW,
+  availableWorkflowNames,
+  getWorkflow,
+  type WorkflowState,
+} from "@/sdk/workflow";
+import { createRunLog } from "@/runs/run-log";
+import { assertConfig } from "@/config";
+import { logger } from "@/util/logger";
 
-const program = new Command();
+async function main(): Promise<void> {
+  const available = availableWorkflowNames().join(" | ");
+  const program = new Command()
+    .name("do")
+    .description("Run a named workflow against a Linear issue.")
+    .argument(
+      "[workflowName]",
+      `workflow to run (${available}); defaults to "${DEFAULT_WORKFLOW}" when only an issue id is given`,
+    )
+    .argument("[issueId]", "Linear issue identifier, e.g. ENG-123")
+    .option("--cwd <path>", "working directory the SDK session runs in", process.cwd())
+    .option("--run-id <id>", "reuse an existing .runs/<id> directory (resumes stage counter)")
+    .parse(process.argv);
 
-program
-  .name("orchestrate")
-  .description("Drive a Linear issue or project through the agent pipeline")
-  .argument("[root]", "Linear issue identifier (ENG-123), issue URL, or project URL")
-  .option("--ba <mode>", "how to bootstrap (analyze|slice)", "analyze")
-  .option("--design <mode>", "TL design flow for Slice 0 (direct|brainstorm)", "direct")
-  .option("--lead <who>", "who answers BA questions (human|po)", "human")
-  .option("--max-po-auto <n>", "cap on auto-PO dispatches (lead=po only)", "3")
-  .option("--dry-run", "planner only — no SDK calls")
-  .option("--max-budget-usd <n>", "max total USD spend for the run", "50")
-  .option("--resume <runId>", "replay a previous run's state and continue")
-  .option("--stages <list>", "restrict which stages may run (comma-separated kinds)")
-  .option("--no-code", "never dispatch /code (plan + design only)")
-  .option("-v, --verbose", "verbose logging")
-  .action(async (rootArg: string | undefined, rawOpts: Record<string, unknown>) => {
-    if (rawOpts.verbose) {
-      (logger as unknown as { level: string }).level = "debug";
-    }
+  // Two-arg form: `do <workflow> <issue>`.
+  // One-arg form: `do <issue>` — falls back to DEFAULT_WORKFLOW.
+  const [first, second] = program.args;
+  let workflowName: string;
+  let issueId: string;
+  if (first && second) {
+    workflowName = first;
+    issueId = second;
+  } else if (first) {
+    workflowName = DEFAULT_WORKFLOW;
+    issueId = first;
+  } else {
+    program.help({ error: true });
+    return;
+  }
 
-    if (!rootArg && !rawOpts.resume) {
-      program.error("Provide a Linear issue id, issue URL, or project URL (or --resume <runId>).");
-    }
+  let factory;
+  try {
+    factory = getWorkflow(workflowName);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error((err as Error).message);
+    process.exit(1);
+  }
 
-    const flagsParse = FlagsSchema.safeParse({
-      ba: rawOpts.ba,
-      design: rawOpts.design,
-      lead: rawOpts.lead,
-      maxPoAuto: Number(rawOpts.maxPoAuto ?? "3"),
-      dryRun: Boolean(rawOpts.dryRun),
-      maxBudgetUsd: Number(rawOpts.maxBudgetUsd ?? "50"),
-      stages: typeof rawOpts.stages === "string" ? (rawOpts.stages as string).split(",").map((s) => s.trim()) : undefined,
-      noCode: rawOpts.code === false,
-      resume: rawOpts.resume as string | undefined,
-      verbose: Boolean(rawOpts.verbose),
-    });
-    if (!flagsParse.success) {
-      program.error("Invalid flags: " + flagsParse.error.message);
-      return;
-    }
-    const flags = flagsParse.data;
+  const opts = program.opts<{ cwd: string; runId?: string }>();
 
-    const started = Date.now();
-    const result = await orchestrate({
-      rootInput: rootArg ?? "",
-      flags,
-      runId: flags.resume,
-    });
-    const durationSec = ((Date.now() - started) / 1000).toFixed(1);
+  assertConfig();
 
-    process.stderr.write(
-      `\n  run:      ${result.runId}\n  dir:      ${result.runDir}\n  stages:   ${result.stageCount}\n  cost USD: ${result.totalCostUsd.toFixed(2)}\n  duration: ${durationSec}s\n  exit:     ${result.exitCode}\n\n`,
-    );
-    process.exit(result.exitCode);
+  const runLog = createRunLog({
+    runId: opts.runId,
+    rootInput: issueId,
+    flags: { workflow: workflowName, cwd: opts.cwd },
+    resume: Boolean(opts.runId),
   });
 
-process.on("SIGINT", () => {
-  logger.warn("SIGINT — exiting");
-  process.exit(130);
-});
-process.on("SIGTERM", () => {
-  logger.warn("SIGTERM — exiting");
-  process.exit(143);
-});
+  logger.info(
+    { runId: runLog.runId, workflow: workflowName, issueId, cwd: opts.cwd },
+    "workflow starting",
+  );
 
-program.parseAsync(process.argv).catch((err) => {
-  logger.error({ err }, "top-level error");
+  const workflow = factory(runLog, opts.cwd);
+  const engine = new GraphologyEngine<WorkflowState>();
+
+  try {
+    const result = await engine.run(
+      workflow,
+      { issueId, runId: runLog.runId },
+      {},
+      { runId: runLog.runId },
+    );
+
+    runLog.appendEvent("run_finished", {
+      workflow: workflowName,
+      finalStatus: result.finalStatus,
+      exitReason: result.exitReason,
+      history: result.history,
+    });
+
+    logger.info(
+      {
+        runId: runLog.runId,
+        workflow: workflowName,
+        finalStatus: result.finalStatus,
+        exitReason: result.exitReason,
+        history: result.history.map((h) => `${h.nodeId}:${h.status}`),
+      },
+      "workflow finished",
+    );
+
+    // Exit code mirrors terminal status:
+    //   Pass          → 0
+    //   WaitUserInput → 2 (suspended, resumable)
+    //   Fail          → 1
+    process.exitCode =
+      result.finalStatus === "Pass"
+        ? 0
+        : result.finalStatus === "WaitUserInput"
+          ? 2
+          : 1;
+  } catch (err) {
+    logger.error({ err, runId: runLog.runId, workflow: workflowName }, "workflow errored");
+    runLog.appendEvent("run_errored", { message: (err as Error).message });
+    process.exitCode = 1;
+  } finally {
+    runLog.close();
+  }
+}
+
+main().catch((err) => {
+  // Last-resort handler — logger.error should already have been called for
+  // anything thrown inside main(). This covers synchronous init failures.
+  // eslint-disable-next-line no-console
+  console.error(err);
   process.exit(1);
 });

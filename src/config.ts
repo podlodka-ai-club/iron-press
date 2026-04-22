@@ -32,12 +32,6 @@ function loadEnvFile(): void {
 }
 loadEnvFile();
 
-export interface RoleBudget {
-  model: string;
-  maxTurns: number;
-  budgetUsd: number;
-}
-
 export const config = {
   workspaceRoot: process.env.WORKSPACE_ROOT ?? defaultWorkspaceRoot,
   orchestratorRoot,
@@ -52,20 +46,6 @@ export const config = {
   githubToken: process.env.GITHUB_TOKEN ?? "",
 
   maxRunUsd: Number(process.env.MAX_RUN_USD ?? "50"),
-
-  // Per-role model + budget defaults. Overridable later via env.
-  roles: {
-    ba: { model: "claude-opus-4-7", maxTurns: 60, budgetUsd: 4 },
-    baSlice: { model: "claude-opus-4-7", maxTurns: 60, budgetUsd: 4 },
-    baCheckComments: { model: "claude-opus-4-7", maxTurns: 30, budgetUsd: 2 },
-    po: { model: "claude-opus-4-7", maxTurns: 25, budgetUsd: 1.5 },
-    tl: { model: "claude-opus-4-7", maxTurns: 80, budgetUsd: 6 },
-    tlDesign: { model: "claude-opus-4-7", maxTurns: 60, budgetUsd: 4 },
-    tlDesignBrainstorm: { model: "claude-opus-4-7", maxTurns: 60, budgetUsd: 4 },
-    tlDesignFinalize: { model: "claude-opus-4-7", maxTurns: 40, budgetUsd: 3 },
-    tlCheckComments: { model: "claude-opus-4-7", maxTurns: 30, budgetUsd: 2 },
-    dev: { model: "claude-opus-4-7", maxTurns: 150, budgetUsd: 12 },
-  } satisfies Record<string, RoleBudget>,
 
   // Keyword list — if any appears in a BA question, never auto-dispatch PO even in --lead=po.
   sensitiveKeywords: [
@@ -96,6 +76,10 @@ export const config = {
 export type Config = typeof config;
 
 export function assertConfig(): void {
+  if (process.env.DEV_MODE === "1") {
+    return;
+  }
+
   if (!config.linearApiKey) {
     throw new Error("LINEAR_API_KEY is required. Copy .env.example to .env and fill it in.");
   }

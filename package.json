@@ -8,10 +8,10 @@
     "node": ">=22.0.0"
   },
   "bin": {
-    "orchestrate": "./dist/index.js"
+    "do": "./dist/index.js"
   },
   "scripts": {
-    "orchestrate": "tsx src/index.ts",
+    "do": "tsx src/index.ts",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",

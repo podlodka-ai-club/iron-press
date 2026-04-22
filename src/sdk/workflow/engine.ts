@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { logger } from "../util/logger.js";
+import { logger } from "@/util/logger.js";
 import type {
   Engine,
   EngineHooks,

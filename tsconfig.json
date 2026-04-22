@@ -18,7 +18,11 @@
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
     "allowImportingTsExtensions": false,
-    "types": ["node"]
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    }
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist", ".runs", "tests"]

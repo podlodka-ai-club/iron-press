@@ -1,5 +1,5 @@
 import { DirectedGraph } from "graphology";
-import { logger } from "../util/logger.js";
+import { logger } from "@/util/logger.js";
 import type {
   EdgeAttributes,
   Node,
