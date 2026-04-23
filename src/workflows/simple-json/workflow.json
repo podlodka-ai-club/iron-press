@@ -1,0 +1,31 @@
+{
+  "name": "simple-json",
+  "initialNodeId": "ba",
+  "nodes": [
+    {
+      "id": "ba",
+      "name": "Business Analyst",
+      "role": "business-analyst",
+      "model": "claude-haiku-4-5",
+      "maxTurns": 60,
+      "budgetUsd": 4,
+      "allowedTools": ["Read", "Grep", "Glob", "WebFetch", "mcp__linear__*", "mcp__plugin_figma_figma__*"],
+      "disallowedTools": ["Edit", "Write", "Bash", "NotebookEdit"],
+      "permissionProfile": "view-only"
+    },
+    {
+      "id": "eng",
+      "name": "Engineer",
+      "role": "engineer",
+      "model": "claude-haiku-4-5",
+      "maxTurns": 150,
+      "budgetUsd": 12,
+      "allowedTools": ["Read", "Grep", "Glob", "WebFetch", "Edit", "Write", "Bash", "mcp__linear__*"],
+      "disallowedTools": [],
+      "permissionProfile": "safe-write"
+    }
+  ],
+  "edges": [
+    { "from": "ba", "to": "eng", "onStatus": "Pass" }
+  ]
+}
