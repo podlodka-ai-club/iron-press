@@ -20,3 +20,11 @@ export function loadSkill(moduleUrl: string, filename: string): string {
   const filePath = path.join(callerDir, filename);
   return stripFrontmatter(readFileSync(filePath, "utf8"));
 }
+
+/**
+ * Load a prompt file from an absolute path.
+ * Used by the dynamic workflow loader where there is no module URL to resolve from.
+ */
+export function loadSkillFromPath(absolutePath: string): string {
+  return stripFrontmatter(readFileSync(absolutePath, "utf8"));
+}

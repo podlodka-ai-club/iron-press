@@ -1,10 +1,14 @@
 #!/usr/bin/env node
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import {
   GraphologyEngine,
   DEFAULT_WORKFLOW,
+  WORKFLOWS,
   availableWorkflowNames,
   getWorkflow,
+  discoverDynamicWorkflows,
   type WorkflowState,
 } from "@/sdk/workflow";
 import { createRunLog } from "@/runs/run-log";
@@ -12,6 +16,14 @@ import { assertConfig } from "@/config";
 import { logger } from "@/util/logger";
 
 async function main(): Promise<void> {
+  // Discover workflow.json-based workflows and merge them in. Static workflows
+  // registered in WORKFLOWS take precedence on name collision.
+  const workflowsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "workflows");
+  const dynamic = discoverDynamicWorkflows(workflowsDir);
+  for (const [name, factory] of Object.entries(dynamic)) {
+    if (!(name in WORKFLOWS)) WORKFLOWS[name] = factory;
+  }
+
   const available = availableWorkflowNames().join(" | ");
   const program = new Command()
     .name("do")
