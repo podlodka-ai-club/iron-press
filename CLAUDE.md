@@ -5,114 +5,150 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-pnpm install                              # install dependencies
-pnpm orchestrate ENG-534                  # run pipeline on a Linear issue
-pnpm orchestrate --resume <runId>         # resume a prior run
-pnpm orchestrate ENG-534 --dry-run        # plan only, no SDK calls
-pnpm orchestrate --help                   # full flag list
-pnpm ui                                   # start monitoring UI at http://127.0.0.1:4455
-pnpm build                                # compile TypeScript
-pnpm typecheck                            # type check only
-pnpm test                                 # run all tests
-pnpm test --reporter=verbose              # verbose test output
-pnpm vitest run tests/planner/decide.test.ts   # run a single test file
+pnpm install                                   # install dependencies
+pnpm do <issueId>                              # run the default workflow on a Linear issue (e.g. ENG-534)
+pnpm do <workflowName> <issueId>               # run a specific workflow
+pnpm do <issueId> --cwd <path>                 # set the cwd the SDK session runs in
+pnpm do <issueId> --run-id <id>                # reuse an existing .runs/<id> directory (stage counter resumes)
+pnpm build                                     # compile TypeScript → dist/
+pnpm typecheck                                 # type-check only (no emit)
+pnpm test                                      # run all vitest suites
+pnpm test:watch                                # vitest in watch mode
+pnpm ui                                        # start monitoring UI (tsx ui/server.ts)
+pnpm ui:typecheck                              # type-check the UI project
 ```
+
+CLI behaviour: `pnpm do` with a single arg treats it as an issue id and picks `DEFAULT_WORKFLOW` (`simple`). Two args is `<workflowName> <issueId>`.
 
 ## Architecture
 
-iron-press is a deterministic TypeScript driver for the agent pipeline. The dispatch loop is **pure TypeScript rules** (not an LLM), which fixes the "sometimes doesn't execute next command" bug.
+iron-press drives a Claude Agent SDK pipeline as a **directed graph of nodes**. Control flow is a Graphology workflow; each node is one headless SDK session. There is no central dispatcher — the engine walks edges based on each node's returned `NodeStatus`.
 
-Pipeline flow: `Project → BA → PO → TL → Code (parallel Rails + React PRs)`
-
-Each role runs as a headless `@anthropic-ai/claude-agent-sdk` session loading `.claude/skills/**/SKILL.md` verbatim — zero behavioural drift from interactive Claude Code.
-
-### Core loop (`src/orchestrator.ts`)
+### Entry point (`src/index.ts`)
 
 ```
-fetchPipelineState() → decide() → dispatchActions() → track cost → check budget
+parse CLI → assertConfig() → createRunLog() → getWorkflow(name) → GraphologyEngine.run()
 ```
 
-Max 50 iterations. Exit codes: 0 (done/blocked), 1 (error), 2 (budget exceeded), 130 (SIGINT/resumable).
+Exit code mirrors the terminal status:
 
-### Planner (`src/planner/decide.ts`)
+| Code | Meaning |
+|------|---------|
+| 0 | `Pass` — workflow reached a node with no matching outgoing edge |
+| 1 | `Fail` — a node returned `Fail`, or the run errored |
+| 2 | `WaitUserInput` — a node suspended pending human input (resumable via `--run-id`) |
 
-BFS tree walk over Linear issues. Classification is title-regex based (`src/state/classify.ts`):
-- `" - Agent Implementation"` → AgentImplementation
-- `" - Slices"` → SlicesParent
-- `^Slice \d+:` → Slice
-- `" - Backend|Frontend"` → RepoIssue
+### Workflow engine (`src/sdk/workflow/`)
 
-Decision priority: check-comments > code > tl-design > po > ba/ba-slice.
+Graphology-backed engine for modelling control flow as a directed graph.
 
-**Slice 0 design flow**: suffix markers drive progress — `" - Empty"` → tl-design → `" - Brainstorm"` → tl-design-finalize.
+**Core concepts:**
+- **`Node<TState>`** — processing step with `id`, `name`, `onEnter?`, `execute`, `onExit?` lifecycle hooks.
+- **`NodeStatus`** — fixed output vocabulary: `"Pass" | "Fail" | "WaitUserInput"`.
+- **Edges** — directed, labeled with the status(es) that trigger them.
 
-**Question FSM**: When a stage posts `## Questions from X`, the issue transitions to Agent Blocked. Next iteration: if human replied → check-comments; otherwise stay blocked.
+**Execution model:** engine calls `node.onEnter` → `node.execute` (returns `{ status }`) → `node.onExit`, then follows the matching outgoing edge. `WaitUserInput` suspends immediately (no edge lookup). Run ends when no outgoing edge matches the last status (natural end) or `WaitUserInput` is returned.
 
-### SDK integration (`src/sdk/session.ts`)
+**Key exports** from `src/sdk/workflow/index.ts`:
+- `Node<TState>` / `NodeContext<TState>` — interfaces for implementing nodes
+- `WorkflowBuilder<TState>` — fluent builder: `addNode` → `addEdge` → `setInitialNode` → `build()`
+- `GraphologyEngine<TState>` — concrete `Engine` implementation; accepts `EngineHooks` and `EngineOptions` (`maxVisitsPerNode`, default 100)
+- `WorkflowError` — typed error with `kind`: `"MISSING_INITIAL_NODE" | "VISIT_LIMIT_EXCEEDED" | "VALIDATION_FAILED"`
+- `WORKFLOWS`, `DEFAULT_WORKFLOW`, `getWorkflow`, `availableWorkflowNames` — workflow registry
 
-Session IDs are UUIDv5 (deterministic from `runId::role::issueId::stageIndex`) so `--resume` re-derives the same IDs without duplicating work.
+### Agent nodes (`src/sdk/node/`)
 
-Tool permissions are role-based: BA/PO/TL are read-only (Read/Grep/Glob/Linear MCP only); dev roles can Edit/Write/Bash within their worktree.
+`AgentNode<TState>` is the base class every LLM-backed node extends. It owns the full SDK session lifecycle:
 
-### Stage result contract
+1. Open a stage directory via `RunLog.openStage({ kind, issueId })`.
+2. Derive a deterministic UUIDv5 session id from `(runId, role, issueId, stageIndex)` so `--run-id` re-derives stable ids.
+3. Run one `query()` with **structured output** locked to `{ status: "Pass"|"Fail"|"WaitUserInput" }` via `outputSchema`. The SDK enforces the shape and retries internally on violations.
+4. Write `prompt.md`, `transcript.jsonl`, `tool-calls.jsonl`, `stderr.log`, and `result.json` into the stage directory.
+5. Return the parsed status.
 
-Every stage **must** emit a fenced JSON block at the end of its response:
+Concrete nodes pass a hard-coded `AgentNodeConfig` to the super constructor — they don't override `execute`.
 
-```json
-{
-  "status": "done" | "blocked" | "failed",
-  "issueIdsCreated": ["ENG-XXX"],
-  "issueIdsUpdated": ["ENG-XXX"],
-  "questionsPosted": boolean,
-  "blockers": ["human-readable blocker"],
-  "summary": "short summary"
-}
+### Node folder convention
+
+Each node lives in its own directory with three files:
+
+```
+src/workflows/<workflow>/nodes/<node>/
+├── index.ts        — class extending AgentNode; imports permissions + skill.md
+├── skill.md        — user prompt template (supports {{issueId}} substitution)
+└── permissions.ts  — allowedTools, disallowedTools, canUseTool guard
 ```
 
-Extracted via regex (last fenced block), validated against Zod schema (`src/types/contracts.ts`). Missing/invalid result → stage marked failed.
+`skill.md` is loaded at module init via `loadSkill(import.meta.url, "skill.md")`. Permissions are **per-node**, not global — they ship next to the node they protect.
 
-### Code stage (`src/stages/code/`)
+### Workflow definition (`src/workflows/<name>/workflow.ts`)
 
-Three sub-steps: **prepare** (fetch issues, create git worktrees, copy secrets) → **dispatch** (parallel dev agent per WorkUnit, each in own worktree cwd) → **cleanup** (remove worktrees, keep branches).
+A workflow is a `WorkflowFactory`: `(runLog, cwd) => Workflow<State>`. Example (`src/workflows/simple/workflow.ts`):
 
-Branch naming: `${githubUsername}/${branchName}` from git config. Secrets are only copied for Backend via `copy-secrets.sh`.
+```ts
+new WorkflowBuilder<SimpleWorkflowState>()
+  .addNode(new BaNode(runLog, cwd))
+  .addNode(new EngNode(runLog, cwd))
+  .addEdge("ba", "eng", "Pass")
+  .setInitialNode("ba")
+  .build();
+```
 
-### Run artifacts
+Register the factory in `src/sdk/workflow/registry.ts` (`WORKFLOWS`) to make it runnable via `pnpm do <name> <issueId>`.
 
-Every run writes to `.runs/<runId>/`:
-- `events.ndjson` — append-only event log
-- `state.json` — last PipelineState snapshot
-- `cost.json` — running totals
-- `blockers.json` — written on blocked exit
-- `stages/NNNN-<role>-<issue>/` — prompt, transcript, result, stderr per stage
+### SDK session (`src/sdk/session/`)
+
+- `runner.ts` — `runSession()` is the generic `@anthropic-ai/claude-agent-sdk` `query()` wrapper. Streams transcript JSONL and stderr to caller-supplied paths, returns the final `result` message or `null` on throw. `permissionMode: "bypassPermissions"` — gating is done via `canUseTool` and allow/deny lists, not prompts. `settingSources: ["user", "project", "local"]` so `.claude/` configs load.
+- `session.ts` — `stableSessionId(role, issueId, runId, stageIndex)` is UUIDv5 over a fixed namespace. The stage index is included because the SDK refuses to reuse session ids and the same `(role, issueId)` pair can be dispatched multiple times per run.
 
 ### Configuration (`src/config.ts`)
 
-Reads `.env` from project root. Key vars: `LINEAR_API_KEY` (required), `ANTHROPIC_API_KEY` (optional — reuses Claude Code OAuth if omitted), `MAX_RUN_USD`, `WORKSPACE_ROOT`.
+Reads `.env` from the orchestrator root (same dir as `package.json`). Key vars:
+- `LINEAR_API_KEY` — required unless `DEV_MODE=1`.
+- `ANTHROPIC_API_KEY` — optional; the SDK reuses Claude Code OAuth if omitted.
+- `GITHUB_TOKEN`, `MAX_RUN_USD`, `WORKSPACE_ROOT` — optional.
+- `config.sensitiveKeywords` — strings (pricing, legal, auth, billing, …) that block auto-PO even in lead mode.
 
-Per-role budgets (model, maxTurns, budgetUsd) defined in `config.ts`. Dev agents: claude-opus-4-7, 150 turns, $12. BA/TL-design: 60 turns, ~$4–6.
+`config.workspaceRoot` defaults to `../..` relative to the orchestrator root (assumes the package sits at `.claude/orchestrator/`).
 
-### Workflow engine (`src/workflow/`)
+### Run artifacts (`src/runs/run-log.ts`)
 
-A generic, Graphology-backed workflow engine for modelling control flow as a directed graph.
+Every run writes to `.runs/<runId>/`:
 
-**Core concepts:**
-- **`Node`** — processing step with `id`, `name`, `onEnter?`, `execute`, `onExit?` lifecycle hooks.
-- **`NodeStatus`** — fixed output vocabulary: `"Pass"` | `"Fail"` | `"WaitUserInput"`.
-- **Edges** — directed, labeled with the status(es) that trigger them.
+```
+.runs/<runId>/
+├── events.ndjson                          append-only event log (run_started, run_finished, …)
+├── state.json                             last PipelineState snapshot (when written)
+├── meta.json                              run metadata
+└── stages/NNNN-<role>-<issue>/            one directory per SDK session
+    ├── prompt.md
+    ├── transcript.jsonl
+    ├── tool-calls.jsonl
+    ├── stderr.log
+    └── result.json                        { status, sessionId, costUsd, tokens }
+```
 
-**Execution model:** engine calls `node.onEnter` → `node.execute` (returns a `NodeStatus`) → `node.onExit`, then follows the matching outgoing edge. `WaitUserInput` suspends immediately (no edge lookup). Run ends when no matching edge exists or `WaitUserInput` is returned.
+Run id format: `YYYYMMDD-HHmmss-<rand>` (local time) so `ls` sorts chronologically.
 
-**Key exports** from `src/workflow/index.ts`:
-- `Node<TState>` / `NodeContext<TState>` — interfaces for implementing nodes
-- `WorkflowBuilder<TState>` — fluent builder: `addNode` → `addEdge` → `setInitialNode` → `build()`
-- `GraphologyEngine<TState>` — concrete `Engine` implementation; accepts `EngineHooks` and `EngineOptions` (`maxVisitsPerNode`)
-- `WorkflowError` — typed error with `kind`: `"MISSING_INITIAL_NODE"` | `"VISIT_LIMIT_EXCEEDED"` | `"VALIDATION_FAILED"`
+### Github client (`src/github/`)
 
-### Testing
+`GithubClient` wraps Octokit for issue and PR reads. Paginated, handles comment truncation and null-safety edge cases. Use this rather than calling `@octokit/rest` directly.
 
-Planner tests are fixture-driven — every branch in the decision table has at least one positive and one negative fixture in `tests/planner/fixtures.ts`. When changing `src/planner/decide.ts` or `src/state/classify.ts`, update or add fixtures there.
+### TypeScript conventions
 
-Workflow engine tests live in `tests/workflow/engine.test.ts` and cover: linear chains, branching, `WaitUserInput` suspension, state mutation, node/engine hooks, history recording, cycle detection, and builder validation errors.
+- Path alias: `@/*` → `src/*` (see `tsconfig.json`). Prefer `@/sdk/workflow` over relative chains like `../../sdk/workflow`.
+- `strict`, `noUncheckedIndexedAccess`, `isolatedModules` are all on. Array/record access may be `undefined` — check before use.
+- All schemas use Zod strict validation.
+- Node 22+ required (`engines.node`).
 
-All schemas use Zod strict validation. TypeScript is configured with strict mode.
+## Known issues
+
+**`tests/planner/` and `tests/workflow/` are currently broken** — they import `src/planner/decide.js` and `src/workflow/index.js`, both removed in the `nodes`-branch rewrite. `pnpm test` reports them as failed suites with 0 tests collected. The other suites (`tests/state/classify.test.ts`, `tests/ui/*`) still pass. Either port these to the new paths (`src/sdk/workflow/`) or delete them before relying on a green `pnpm test`.
+
+## Testing
+
+Passing suites today:
+- `tests/state/classify.test.ts` — title/label regex classifiers (still live in `src/state/classify.ts`).
+- `tests/ui/status.test.ts`, `tests/ui/artifacts.test.ts`, `tests/ui/tail.test.ts` — UI-layer helpers in `ui/`.
+
+When changing the workflow engine or `AgentNode`, write tests against the new `src/sdk/workflow/` paths. Every branch of the engine's edge-matching logic should have a positive and negative case.

@@ -1,86 +1,84 @@
-# Orchestrator
+# iron-press
 
-Production-grade TypeScript driver for the agent pipeline. Replaces the Claude Code `/pm`-based dispatch loop with deterministic planning + headless Claude Agent SDK stages.
+A deterministic TypeScript driver for Claude Agent SDK pipelines. Control flow is a **directed graph of nodes** (Graphology), not an LLM dispatcher — the same workflow produces the same traversal every time.
 
-## What it does
-
-Given a Linear issue or project ID, walks the pipeline to completion (PRs opened) or to a deterministic blocked-on-human state:
-
-```
-Project → BA → PO → TL → Code (parallel Rails + React PRs)
-```
-
-Each LLM role (BA, PO, TL, Rails dev, React dev) runs as a headless `@anthropic-ai/claude-agent-sdk` session that loads the existing `.claude/skills/**/SKILL.md` instructions verbatim — zero behavioural drift from the interactive Claude Code flow.
-
-The dispatch step is **deterministic TypeScript**, not an LLM. That fixes the "sometimes doesn't execute the next command" bug that plagues the interactive pipeline.
+Each node runs one headless `@anthropic-ai/claude-agent-sdk` session with per-node prompts (`skill.md`) and permissions (`permissions.ts`). SDK structured output locks every node's return to one of three statuses — `Pass`, `Fail`, `WaitUserInput` — which the engine maps onto outgoing edges.
 
 ## Install
 
 ```bash
-cd .claude/orchestrator
 pnpm install
 cp .env.example .env
-# fill in LINEAR_API_KEY
+# fill in LINEAR_API_KEY (required unless DEV_MODE=1)
 ```
 
 ### Anthropic auth
 
-`ANTHROPIC_API_KEY` is **optional**. If you're logged in to Claude Code
-(`claude login`), the Agent SDK reuses those OAuth credentials and bills
-against your Pro/Max/Team subscription. Set the key only when you want
-pay-as-you-go API credits instead.
-
-Verify you're logged in with `claude /status` — if it shows an account, you're
-set.
+`ANTHROPIC_API_KEY` is **optional**. If you're logged in to Claude Code (`claude login`), the Agent SDK reuses those OAuth credentials and bills against your Pro/Max/Team subscription. Set the key only for pay-as-you-go API credits. Verify with `claude /status`.
 
 ## Run
 
 ```bash
-pnpm orchestrate ENG-534
-pnpm orchestrate https://linear.app/team/project/my-feature-abc123
-pnpm orchestrate ENG-534 --lead=po                   # auto-answer BA questions via PO
-pnpm orchestrate ENG-534 --ba=slice --design=brainstorm
-pnpm orchestrate ENG-534 --dry-run                   # plan only, no SDK calls
-pnpm orchestrate --resume abc123                     # resume a prior run
+pnpm do <issueId>                        # default workflow (simple) on a Linear issue
+pnpm do <workflowName> <issueId>         # specific workflow
+pnpm do ENG-534 --cwd /path/to/repo      # set the SDK session cwd
+pnpm do ENG-534 --run-id 20260423-xyz    # reuse an existing .runs/<id> directory
 ```
 
-See `pnpm orchestrate --help` for the full flag list.
+Available workflows are registered in `src/sdk/workflow/registry.ts`. Today: `simple` (BA → Eng).
+
+## Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | `Pass` — workflow reached a node with no matching outgoing edge |
+| 1 | `Fail` — a node returned `Fail`, or the run errored |
+| 2 | `WaitUserInput` — a node suspended pending human input (resumable via `--run-id`) |
 
 ## Layout
 
 ```
 src/
-├── index.ts               CLI entry
-├── orchestrator.ts        Main loop (fetch → decide → dispatch)
-├── config.ts              Env + workspace root + per-role budgets
-├── types/contracts.ts     Zod schemas (Flags, Issue, Action, StageResult, …)
-├── state/                 Linear client + tree walk + classifier (deterministic)
-├── planner/               Decision rules (ports drive-project/SKILL.md)
-├── stages/                Per-role SDK session specs (BA, PO, TL, …)
-├── stages/code/           Worktree prep + parallel dev dispatch + cleanup
-├── sdk/                   query() wrapper, permission guards, hooks, skill loader
-├── runs/                  Run log (NDJSON), artifacts, blockers report
-├── workflow/              Generic Graphology-backed workflow engine
-└── util/                  Logger, retry, JSON extraction
+├── index.ts                  CLI entry (commander) → engine.run()
+├── config.ts                 .env loader, workspace paths, sensitive keywords, retry policy
+├── sdk/
+│   ├── workflow/             Graphology engine, builder, contracts, workflow registry
+│   ├── node/                 AgentNode base class + tool-call hooks
+│   └── session/              SDK query() wrapper + stable UUIDv5 session ids
+├── workflows/
+│   └── simple/               BA → Eng workflow (factory + per-node folders)
+│       └── nodes/<node>/     index.ts + skill.md + permissions.ts
+├── github/                   Octokit client for issue/PR reads
+├── runs/run-log.ts           .runs/<runId>/ artifact manager
+├── types/contracts.ts        Zod schemas
+└── util/                     logger, retry, skill-loader, extract-json
+
+tests/
+├── state/                    [legacy] tests against pre-rewrite src/state/ — see LEGACY.md
+├── planner/                  [legacy] broken — imports deleted src/planner/
+├── workflow/                 [legacy] broken — imports deleted src/workflow/ (now src/sdk/workflow/)
+└── ui/                       passing — helpers for ui/
+
+ui/                           monitoring UI (tsx ui/server.ts)
 ```
 
 ## Workflow engine
 
-`src/workflow/` provides a lightweight, statically-typed workflow engine backed by [Graphology](https://graphology.github.io/). Control flow is expressed as a directed graph of **nodes** connected by **status-labeled edges**.
+`src/sdk/workflow/` — a typed, Graphology-backed engine. Nodes are connected by **status-labeled edges**.
 
 ### Statuses
 
-Every node's `execute` handler returns one of three statuses:
+Every node's `execute` returns one of:
 
 | Status | Meaning |
-|---|---|
-| `Pass` | Step succeeded — follow the `Pass` edge to the next node |
-| `Fail` | Step failed — follow the `Fail` edge, or end the run if none exists |
-| `WaitUserInput` | Execution suspended — run ends immediately, no edge is followed |
+|--------|---------|
+| `Pass` | Succeeded — follow the `Pass` edge to the next node |
+| `Fail` | Failed — follow the `Fail` edge, or end the run if none exists |
+| `WaitUserInput` | Suspend — run ends immediately (no edge lookup) |
 
 ### Node interface
 
-```typescript
+```ts
 interface Node<TState> {
   id: string;
   name: string;
@@ -90,12 +88,12 @@ interface Node<TState> {
 }
 ```
 
-`ctx.state` is a shared mutable object — handlers write to it in place.
+`ctx.state` is shared and mutable — handlers write to it in place.
 
-### Building and running a workflow
+### Building and running
 
-```typescript
-import { WorkflowBuilder, GraphologyEngine } from "./src/workflow/index.js";
+```ts
+import { WorkflowBuilder, GraphologyEngine } from "@/sdk/workflow";
 
 type State = { result: string };
 
@@ -125,14 +123,27 @@ const result = await new GraphologyEngine<State>().run(
 );
 ```
 
-## Exit codes
+## Agent nodes
 
-| Code | Meaning                                                                 |
-|------|-------------------------------------------------------------------------|
-| 0    | Pipeline complete OR ran to a blocked-on-human state (see Blockers)     |
-| 1    | Unrecoverable error (auth, config, persistent SDK failure)              |
-| 2    | Budget cap exceeded                                                     |
-| 130  | SIGINT (state checkpointed; resumable via `--resume <runId>`)           |
+`AgentNode<TState>` (in `src/sdk/node/`) is the base class for SDK-backed nodes. It owns:
+
+1. Opening a stage directory via `RunLog.openStage({ kind, issueId })`.
+2. Deriving a deterministic UUIDv5 session id from `(runId, role, issueId, stageIndex)`.
+3. Running one `query()` with structured output locked to `{ status: "Pass"|"Fail"|"WaitUserInput" }`.
+4. Writing `prompt.md`, `transcript.jsonl`, `tool-calls.jsonl`, `stderr.log`, `result.json`.
+
+Concrete nodes pass an `AgentNodeConfig` to the super constructor — they don't override `execute`. See `src/workflows/simple/nodes/ba/index.ts` for the reference pattern.
+
+### Node folder convention
+
+```
+src/workflows/<workflow>/nodes/<node>/
+├── index.ts        — class extends AgentNode
+├── skill.md        — user prompt template ({{issueId}} is substituted)
+└── permissions.ts  — allowedTools, disallowedTools, canUseTool
+```
+
+Permissions ship **next to the node**, not in a global config.
 
 ## Run artifacts
 
@@ -140,12 +151,17 @@ Every run writes to `.runs/<runId>/`:
 
 ```
 .runs/<runId>/
-├── state.json                  Last PipelineState snapshot
-├── events.ndjson               Append-only event log
-├── cost.json                   Running totals (USD, tokens)
-├── blockers.json               Written on blocked exit
-└── stages/NNNN-<role>-<issue>/ Per-stage prompt, transcript, result, stderr
+├── events.ndjson                          run-level event log
+├── meta.json                              run metadata
+└── stages/NNNN-<role>-<issue>/            one directory per SDK session
+    ├── prompt.md
+    ├── transcript.jsonl
+    ├── tool-calls.jsonl
+    ├── stderr.log
+    └── result.json                        { status, sessionId, costUsd, tokens }
 ```
+
+Run id format: `YYYYMMDD-HHmmss-<rand>` (local time), so `ls` sorts chronologically.
 
 ## Tests
 
@@ -153,4 +169,18 @@ Every run writes to `.runs/<runId>/`:
 pnpm test
 ```
 
-Planner rules are covered by fixture-driven unit tests — every branch in the decision tables from `drive-project/SKILL.md` has at least one positive and one negative fixture.
+Passing today: `tests/state/classify.test.ts` (note: tests legacy source; see `tests/state/LEGACY.md`), `tests/ui/*`.
+
+Failing today: `tests/planner/` and `tests/workflow/` — both import source files that were deleted in the workflow-engine rewrite. See each folder's `LEGACY.md`.
+
+## Scripts
+
+```bash
+pnpm do <args>          # run a workflow (see Run)
+pnpm build              # compile TypeScript → dist/
+pnpm typecheck          # type-check only
+pnpm test               # vitest run
+pnpm test:watch         # vitest watch
+pnpm ui                 # monitoring UI
+pnpm ui:typecheck       # type-check the UI project
+```
