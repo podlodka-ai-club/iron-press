@@ -3,7 +3,7 @@ import {
   GraphologyEngine,
   WorkflowBuilder,
   WorkflowError,
-} from "../../src/workflow/index.js";
+} from "../../../src/sdk/workflow/index.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
