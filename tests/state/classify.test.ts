@@ -8,7 +8,7 @@ import {
   sliceNumberFromTitle,
   containsSensitiveKeyword,
 } from "../../src/state/classify.js";
-import { makeIssue } from "../planner/fixtures.js";
+import { makeIssue } from "./fixtures.js";
 
 describe("classify", () => {
   it("classifies Agent Implementation", () => {
