@@ -1,4 +1,5 @@
-import type { LinearIssue, IssueType, Comment } from "../types/contracts.js";
+import type { LinearIssue, LinearComment as Comment } from "../linear/linear-contracts.js";
+import type { IssueType } from "../types/contracts.js";
 
 // =============================================================================
 // Title-based classification

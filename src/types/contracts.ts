@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LinearIssueSchema } from "../linear/linear-contracts.js";
 
 // =============================================================================
 // Flags — parsed from CLI
@@ -18,35 +19,6 @@ export const FlagsSchema = z.object({
 });
 export type Flags = z.infer<typeof FlagsSchema>;
 
-// =============================================================================
-// Linear domain types
-// =============================================================================
-
-export const IssueStatusSchema = z.enum([
-  "Backlog",
-  "Todo",
-  "Agent Working",
-  "Agent Blocked",
-  "Agent Done",
-  "In Progress",
-  "In Development",
-  "In Review",
-  "Done",
-  "Canceled",
-  "Duplicate",
-]);
-export type IssueStatus = z.infer<typeof IssueStatusSchema>;
-
-export const CommentSchema = z.object({
-  id: z.string(),
-  body: z.string(),
-  createdAt: z.string(),
-  authorName: z.string().optional(),
-  authorType: z.enum(["human", "agent"]).default("human"),
-  isResolved: z.boolean().default(false),
-});
-export type Comment = z.infer<typeof CommentSchema>;
-
 export const IssueTypeSchema = z.enum([
   "Project",
   "FeatureIssue",
@@ -57,24 +29,6 @@ export const IssueTypeSchema = z.enum([
   "Unknown",
 ]);
 export type IssueType = z.infer<typeof IssueTypeSchema>;
-
-export const LinearIssueSchema = z.object({
-  id: z.string(), // e.g. "ENG-534"
-  uuid: z.string(), // Linear internal id (required for some mutations)
-  title: z.string(),
-  description: z.string().default(""),
-  status: IssueStatusSchema,
-  url: z.string(),
-  parentId: z.string().optional(),
-  childrenIds: z.array(z.string()).default([]),
-  branchName: z.string().optional(),
-  baseBranch: z.string().optional(),
-  comments: z.array(CommentSchema).default([]),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-  labels: z.array(z.string()).default([]),
-});
-export type LinearIssue = z.infer<typeof LinearIssueSchema>;
 
 export const ProjectRootSchema = z.object({
   kind: z.literal("project"),

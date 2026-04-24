@@ -1,13 +1,17 @@
-import type { Flags, LinearIssue, PipelineState, Root } from "../types/contracts.js";
-import { fetchChildrenByParentId, fetchIssue, fetchProject, parseInput } from "./linear-client.js";
+import type { LinearIssue } from "../linear/linear-contracts.js";
+import type { Flags, PipelineState, Root } from "../types/contracts.js";
+import { LinearClient } from "../linear/linear-client.js";
+import { config } from "../config.js";
 import { logger } from "../util/logger.js";
+
+const linearClient = new LinearClient(config.linearApiKey ?? "", logger);
 
 /**
  * Fetch the full tree of issues needed by the planner, starting from a project
  * URL or an issue identifier. Returns a PipelineState keyed by issue id.
  */
 export async function fetchPipelineState(input: string, flags: Flags): Promise<PipelineState> {
-  const parsed = parseInput(input);
+  const parsed = LinearClient.parseInput(input);
   const issues: Record<string, LinearIssue> = {};
   let root: Root;
 
@@ -24,16 +28,16 @@ export async function fetchPipelineState(input: string, flags: Flags): Promise<P
   }
 
   if (parsed.kind === "project") {
-    const { root: projectRoot, topIssues } = await fetchProject(parsed.value);
-    root = projectRoot;
-    for (const ti of topIssues) await addIssue(ti, true);
+    const project = await linearClient.fetchProject(parsed.value);
+    root = { kind: "project", id: project.id, name: project.name, url: project.url, issueIds: project.issues.map((i) => i.id) };
+    for (const ti of project.issues) await addIssue(ti, true);
   } else {
-    const rootIssue = await fetchIssue(parsed.value);
+    const rootIssue = await linearClient.fetchIssue(parsed.value);
     await addIssue(rootIssue, true);
     // Walk up to the feature / project ancestor so the planner sees the full context.
     let current: LinearIssue | undefined = rootIssue;
     while (current?.parentId) {
-      const parent = await fetchIssue(current.parentId);
+      const parent = await linearClient.fetchIssue(current.parentId);
       await addIssue(parent, /* do not re-expand siblings, keep walk focused */ false);
       current = parent;
     }
@@ -46,7 +50,7 @@ export async function fetchPipelineState(input: string, flags: Flags): Promise<P
     if (!parentId) continue;
     const parent = issues[parentId];
     if (!parent) continue;
-    const kids = await fetchChildrenByParentId(parentId);
+    const kids = await linearClient.fetchChildrenByParentId(parentId);
     for (const k of kids) await addIssue(k, true);
   }
 
