@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-pnpm install                                   # install dependencies
+pnpm install                                   # install dependencies (also installs git hooks via husky)
 pnpm do <issueId>                              # run the default workflow on a Linear issue (e.g. ENG-534)
 pnpm do <workflowName> <issueId>               # run a specific workflow
 pnpm do <issueId> --cwd <path>                 # set the cwd the SDK session runs in
@@ -17,6 +17,8 @@ pnpm test:watch                                # vitest in watch mode
 pnpm ui                                        # start monitoring UI (tsx ui/server.ts)
 pnpm ui:typecheck                              # type-check the UI project
 ```
+
+A pre-commit hook (`.husky/pre-commit`) runs `pnpm typecheck && pnpm test` before every commit and blocks it on failure.
 
 CLI behaviour: `pnpm do` with a single arg treats it as an issue id and picks `DEFAULT_WORKFLOW` (`simple`). Two args is `<workflowName> <issueId>`.
 
@@ -141,14 +143,11 @@ Run id format: `YYYYMMDD-HHmmss-<rand>` (local time) so `ls` sorts chronological
 - All schemas use Zod strict validation.
 - Node 22+ required (`engines.node`).
 
-## Known issues
-
-**`tests/planner/` and `tests/workflow/` are currently broken** — they import `src/planner/decide.js` and `src/workflow/index.js`, both removed in the `nodes`-branch rewrite. `pnpm test` reports them as failed suites with 0 tests collected. The other suites (`tests/state/classify.test.ts`, `tests/ui/*`) still pass. Either port these to the new paths (`src/sdk/workflow/`) or delete them before relying on a green `pnpm test`.
-
 ## Testing
 
-Passing suites today:
-- `tests/state/classify.test.ts` — title/label regex classifiers (still live in `src/state/classify.ts`).
+All suites pass (`pnpm test`):
+- `tests/state/classify.test.ts` — title/label regex classifiers (`src/state/classify.ts`).
+- `tests/sdk/workflow/engine.test.ts` — workflow engine edge-matching logic.
 - `tests/ui/status.test.ts`, `tests/ui/artifacts.test.ts`, `tests/ui/tail.test.ts` — UI-layer helpers in `ui/`.
 
-When changing the workflow engine or `AgentNode`, write tests against the new `src/sdk/workflow/` paths. Every branch of the engine's edge-matching logic should have a positive and negative case.
+When changing the workflow engine or `AgentNode`, write tests against `src/sdk/workflow/`. Every branch of the engine's edge-matching logic should have a positive and negative case.
