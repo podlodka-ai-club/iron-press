@@ -11,6 +11,7 @@
     "do": "./dist/index.js"
   },
   "scripts": {
+    "prepare": "husky",
     "do": "tsx src/index.ts",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -35,6 +36,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "husky": "^9.1.7",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
