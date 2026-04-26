@@ -22,6 +22,10 @@ export function Toolbar({ workflows, onValidation, onMessage }: Props) {
   const clearCanvas = useWorkflowStore((s) => s.clearCanvas);
   const loadBundle = useWorkflowStore((s) => s.loadBundle);
   const saveWorkflow = useWorkflowStore((s) => s.saveWorkflow);
+  const past = useWorkflowStore((s) => s.past);
+  const future = useWorkflowStore((s) => s.future);
+  const undo = useWorkflowStore((s) => s.undo);
+  const redo = useWorkflowStore((s) => s.redo);
 
   const [saving, setSaving] = useState(false);
   const [showLoad, setShowLoad] = useState(false);
@@ -122,6 +126,27 @@ export function Toolbar({ workflows, onValidation, onMessage }: Props) {
 
         <button className="toolbar-btn" onClick={autoLayout}>
           Auto layout
+        </button>
+
+        <div style={{ width: 1, height: 16, background: "#30363d" }} />
+
+        <button
+          className="toolbar-btn"
+          onClick={undo}
+          disabled={past.length === 0}
+          title="Undo (⌘Z)"
+          style={{ padding: "4px 8px", fontSize: 14 }}
+        >
+          ↶
+        </button>
+        <button
+          className="toolbar-btn"
+          onClick={redo}
+          disabled={future.length === 0}
+          title="Redo (⌘⇧Z)"
+          style={{ padding: "4px 8px", fontSize: 14 }}
+        >
+          ↷
         </button>
       </div>
     </Panel>

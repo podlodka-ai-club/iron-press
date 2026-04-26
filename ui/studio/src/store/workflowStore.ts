@@ -14,13 +14,26 @@ import type { AgentTypeInfo, BuilderNodeData, NodeStatus, WorkflowBundle } from 
 import { layoutNodes } from "../layout.js";
 import { createWorkflow, updateWorkflow } from "../api.js";
 
+interface HistoryState {
+  nodes: Node<BuilderNodeData>[];
+  edges: Edge<{ onStatus: NodeStatus; sourceRole?: string }>[];
+  initialNodeId: string;
+}
+
 interface WorkflowStore {
   // React Flow graph state
   nodes: Node<BuilderNodeData>[];
-  edges: Edge<{ onStatus: NodeStatus }>[];
+  edges: Edge<{ onStatus: NodeStatus; sourceRole?: string }>[];
   onNodesChange: (changes: NodeChange<Node<BuilderNodeData>>[]) => void;
-  onEdgesChange: (changes: EdgeChange<Edge<{ onStatus: NodeStatus }>>[]) => void;
+  onEdgesChange: (changes: EdgeChange<Edge<{ onStatus: NodeStatus; sourceRole?: string }>>[]) => void;
   onConnect: (connection: Connection) => void;
+
+  // History state
+  past: HistoryState[];
+  future: HistoryState[];
+  commitHistory: () => void;
+  undo: () => void;
+  redo: () => void;
 
   // Workflow meta
   workflowName: string;
@@ -46,6 +59,7 @@ interface WorkflowStore {
   clearCanvas: () => void;
   loadBundle: (bundle: WorkflowBundle) => void;
   saveWorkflow: (isNew: boolean) => Promise<void>;
+  deleteSelected: () => void;
 }
 
 function uniqueId(base: string, existingIds: Set<string>): string {
@@ -66,6 +80,8 @@ function makeNode(
 export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   nodes: [],
   edges: [],
+  past: [],
+  future: [],
   workflowName: "",
   initialNodeId: "",
   isDirty: false,
@@ -73,7 +89,55 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   mode: "design",
   executionState: {},
 
+  commitHistory: () => {
+    const { nodes, edges, initialNodeId, past } = get();
+    // Don't commit if nothing changed
+    const last = past[past.length - 1];
+    if (last && last.nodes === nodes && last.edges === edges && last.initialNodeId === initialNodeId) {
+      return;
+    }
+    set({
+      past: [...past, { nodes, edges, initialNodeId }],
+      future: [],
+    });
+  },
+
+  undo: () => {
+    const { past, future, nodes, edges, initialNodeId } = get();
+    if (past.length === 0) return;
+    const previous = past[past.length - 1];
+    if (!previous) return;
+    const newPast = past.slice(0, past.length - 1);
+    set({
+      past: newPast,
+      future: [{ nodes, edges, initialNodeId }, ...future],
+      nodes: previous.nodes,
+      edges: previous.edges,
+      initialNodeId: previous.initialNodeId,
+      isDirty: true,
+    });
+  },
+
+  redo: () => {
+    const { past, future, nodes, edges, initialNodeId } = get();
+    if (future.length === 0) return;
+    const next = future[0];
+    if (!next) return;
+    const newFuture = future.slice(1);
+    set({
+      past: [...past, { nodes, edges, initialNodeId }],
+      future: newFuture,
+      nodes: next.nodes,
+      edges: next.edges,
+      initialNodeId: next.initialNodeId,
+      isDirty: true,
+    });
+  },
+
   onNodesChange: (changes) => {
+    if (changes.some(c => c.type === "remove" || c.type === "add")) {
+      get().commitHistory();
+    }
     set((s) => ({
       nodes: applyNodeChanges(changes, s.nodes) as Node<BuilderNodeData>[],
       isDirty: true,
@@ -81,28 +145,35 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   },
 
   onEdgesChange: (changes) => {
+    if (changes.some(c => c.type === "remove" || c.type === "add")) {
+      get().commitHistory();
+    }
     set((s) => ({
-      edges: applyEdgeChanges(changes, s.edges) as Edge<{ onStatus: NodeStatus }>[],
+      edges: applyEdgeChanges(changes, s.edges) as Edge<{ onStatus: NodeStatus; sourceRole?: string }>[],
       isDirty: true,
     }));
   },
 
   onConnect: (connection) => {
+    get().commitHistory();
     if (!connection.sourceHandle) return;
     const status = connection.sourceHandle as NodeStatus;
-    set((s) => ({
-      edges: addEdge(
-        {
-          ...connection,
-          id: `${connection.source}-${connection.target}-${status}`,
-          type: "statusEdge",
-          data: { onStatus: status },
-          label: status,
-        },
-        s.edges,
-      ) as Edge<{ onStatus: NodeStatus }>[],
-      isDirty: true,
-    }));
+    set((s) => {
+      const sourceNode = s.nodes.find((n) => n.id === connection.source);
+      return {
+        edges: addEdge(
+          {
+            ...connection,
+            id: `${connection.source}-${connection.target}-${status}`,
+            type: "statusEdge",
+            data: { onStatus: status, sourceRole: sourceNode?.data?.role },
+            label: status,
+          },
+          s.edges,
+        ) as Edge<{ onStatus: NodeStatus; sourceRole?: string }>[],
+        isDirty: true,
+      };
+    });
   },
 
   setWorkflowName: (name) => set({ workflowName: name, isDirty: true }),
@@ -110,6 +181,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   setSelectedNode: (nodeId) => set({ selectedNodeId: nodeId }),
 
   setInitialNode: (nodeId) => {
+    get().commitHistory();
     set((s) => ({
       initialNodeId: nodeId,
       nodes: s.nodes.map((n) => ({
@@ -121,6 +193,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   },
 
   updateNodeData: (nodeId, patch) => {
+    get().commitHistory();
     set((s) => ({
       nodes: s.nodes.map((n) =>
         n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n,
@@ -130,6 +203,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   },
 
   addNodeFromPalette: (agentType, position) => {
+    get().commitHistory();
     const existingIds = new Set(get().nodes.map((n) => n.id));
     const id = uniqueId(agentType.defaultNodeId, existingIds);
     const { initialNodeId } = get();
@@ -150,6 +224,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   },
 
   addNodesFromTemplate: (bundle, dropPosition) => {
+    get().commitHistory();
     const existingIds = new Set(get().nodes.map((n) => n.id));
     const idMap = new Map<string, string>();
 
@@ -176,16 +251,17 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       },
     }));
 
-    const newEdges: Edge<{ onStatus: NodeStatus }>[] = bundle.definition.edges.map((e) => {
+    const newEdges: Edge<{ onStatus: NodeStatus; sourceRole?: string }>[] = bundle.definition.edges.map((e) => {
       const src = idMap.get(e.from) ?? e.from;
       const tgt = idMap.get(e.to) ?? e.to;
+      const srcNode = bundle.definition.nodes.find((n) => n.id === e.from);
       return {
         id: `${src}-${tgt}-${e.onStatus}`,
         source: src,
         target: tgt,
         sourceHandle: e.onStatus,
         type: "statusEdge",
-        data: { onStatus: e.onStatus },
+        data: { onStatus: e.onStatus, sourceRole: srcNode?.role },
       };
     });
 
@@ -206,13 +282,39 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     });
   },
 
+  deleteSelected: () => {
+    const { nodes, edges, selectedNodeId } = get();
+    if (!selectedNodeId) return;
+    
+    get().commitHistory();
+    const nodeToDelete = nodes.find(n => n.selected || n.id === selectedNodeId);
+    if (nodeToDelete) {
+      set({
+        nodes: nodes.filter(n => n.id !== nodeToDelete.id),
+        edges: edges.filter(e => e.source !== nodeToDelete.id && e.target !== nodeToDelete.id),
+        selectedNodeId: null,
+        isDirty: true,
+      });
+    } else {
+      const edgeToDelete = edges.find(e => e.selected);
+      if (edgeToDelete) {
+        set({
+          edges: edges.filter(e => e.id !== edgeToDelete.id),
+          isDirty: true,
+        });
+      }
+    }
+  },
+
   autoLayout: () => {
+    get().commitHistory();
     const { nodes, edges } = get();
     const laid = layoutNodes(nodes, edges);
     set({ nodes: laid as Node<BuilderNodeData>[], isDirty: true });
   },
 
   clearCanvas: () => {
+    get().commitHistory();
     set({ nodes: [], edges: [], workflowName: "", initialNodeId: "", selectedNodeId: null, isDirty: false });
   },
 
@@ -235,14 +337,17 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       },
     }));
 
-    const edges: Edge<{ onStatus: NodeStatus }>[] = bundle.definition.edges.map((e) => ({
-      id: `${e.from}-${e.to}-${e.onStatus}`,
-      source: e.from,
-      target: e.to,
-      sourceHandle: e.onStatus,
-      type: "statusEdge",
-      data: { onStatus: e.onStatus },
-    }));
+    const edges: Edge<{ onStatus: NodeStatus; sourceRole?: string }>[] = bundle.definition.edges.map((e) => {
+      const srcNode = bundle.definition.nodes.find((n) => n.id === e.from);
+      return {
+        id: `${e.from}-${e.to}-${e.onStatus}`,
+        source: e.from,
+        target: e.to,
+        sourceHandle: e.onStatus,
+        type: "statusEdge",
+        data: { onStatus: e.onStatus, sourceRole: srcNode?.role },
+      };
+    });
 
     const laid = layoutNodes(nodes, edges);
     set({
@@ -252,6 +357,8 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       initialNodeId: bundle.definition.initialNodeId,
       selectedNodeId: null,
       isDirty: false,
+      past: [],
+      future: [],
     });
   },
 

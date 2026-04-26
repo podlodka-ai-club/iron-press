@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { ReactFlow, Background, Controls, MiniMap } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { AgentNode } from "./AgentNode.js";
@@ -21,7 +21,31 @@ export function Canvas({ agentTypes }: Props) {
   const onConnect = useWorkflowStore((s) => s.onConnect);
   const addNodeFromPalette = useWorkflowStore((s) => s.addNodeFromPalette);
   const setSelectedNode = useWorkflowStore((s) => s.setSelectedNode);
+  const commitHistory = useWorkflowStore((s) => s.commitHistory);
+  const undo = useWorkflowStore((s) => s.undo);
+  const redo = useWorkflowStore((s) => s.redo);
   const flowRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in inputs
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+        if (e.shiftKey) {
+          e.preventDefault();
+          redo();
+        } else {
+          e.preventDefault();
+          undo();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo]);
 
   const onDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -54,6 +78,7 @@ export function Canvas({ agentTypes }: Props) {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onNodeDragStart={commitHistory}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onPaneClick={() => setSelectedNode(null)}
