@@ -11,18 +11,14 @@ const ROLE_COLORS: Record<string, string> = {
   "tech-lead": "#388bfd",
   "product-owner": "#a371f7",
   "pull-request": "#3fb950",
+  human: "#ff7b72",
+  "worktree-script": "#8957e5",
 };
 
-const STATUS_HANDLES: NodeStatus[] = ["Pass", "Fail", "WaitUserInput"];
 const STATUS_COLORS: Record<NodeStatus, string> = {
   Pass: "#3fb950",
   Fail: "#f85149",
-  WaitUserInput: "#d29922",
-};
-const STATUS_LABELS: Record<NodeStatus, string> = {
-  Pass: "Pass",
-  Fail: "Fail",
-  WaitUserInput: "Wait",
+  WaitUserInput: "#8b949e",
 };
 
 function AgentNodeComponent({ id, data, selected }: NodeProps<AgentNodeType>) {
@@ -39,15 +35,12 @@ function AgentNodeComponent({ id, data, selected }: NodeProps<AgentNodeType>) {
   );
 
   const roleColor = ROLE_COLORS[data.role] ?? "#8b949e";
-
-  const borderColor = selected
-    ? "#388bfd"
-    : hovered
-    ? "rgba(88,166,255,0.35)"
-    : "#30363d";
-
+  const borderColor = selected ? "#388bfd" : hovered ? "rgba(88,166,255,0.35)" : "#30363d";
   const bg = selected ? "#1c2333" : "#21262d";
   const headerBg = selected ? "#182030" : "#161b22";
+
+  const isHuman = data.role === "human";
+  const isScript = data.role === "worktree-script";
 
   return (
     <div
@@ -58,8 +51,11 @@ function AgentNodeComponent({ id, data, selected }: NodeProps<AgentNodeType>) {
       style={{
         width: 240,
         background: bg,
+        backgroundImage: isHuman
+          ? "repeating-linear-gradient(45deg, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 10px, transparent 10px, transparent 20px)"
+          : "none",
         borderRadius: 8,
-        overflow: "hidden",
+        overflow: "visible", // Allow the decider diamond to break out
         cursor: "pointer",
         borderTop: `1px solid ${borderColor}`,
         borderRight: `1px solid ${borderColor}`,
@@ -75,16 +71,19 @@ function AgentNodeComponent({ id, data, selected }: NodeProps<AgentNodeType>) {
           ? "0 2px 8px rgba(0,0,0,0.4)"
           : "0 1px 4px rgba(0,0,0,0.3)",
         transition: "box-shadow 0.15s, border-color 0.15s, background 0.15s",
+        display: "flex",
+        flexDirection: "column",
       }}
     >
       <Handle
         type="target"
-        position={Position.Top}
+        position={Position.Left}
         style={{
           background: "#8b949e",
-          width: 10,
-          height: 10,
-          border: "2px solid #21262d",
+          width: 14,
+          height: 14,
+          left: -7,
+          border: `2px solid ${bg}`,
         }}
       />
 
@@ -97,6 +96,8 @@ function AgentNodeComponent({ id, data, selected }: NodeProps<AgentNodeType>) {
           alignItems: "center",
           gap: 8,
           borderBottom: "1px solid #30363d",
+          borderTopLeftRadius: 8,
+          borderTopRightRadius: 8,
         }}
       >
         <span
@@ -131,79 +132,102 @@ function AgentNodeComponent({ id, data, selected }: NodeProps<AgentNodeType>) {
 
       {/* Body */}
       <div style={{ padding: "8px 12px 10px" }}>
-        <div style={{ fontSize: 12, color: "#c9d1d9", marginBottom: 2 }}>{data.model}</div>
-        <div style={{ fontSize: 12, color: "#8b949e", marginBottom: 8 }}>
-          {data.maxTurns} turns · ${data.budgetUsd}
-        </div>
-        <span
-          style={{
-            display: "inline-block",
-            padding: "2px 7px",
-            background: "#161b22",
-            border: "1px solid #30363d",
-            borderRadius: 12,
-            fontSize: 10,
-            fontWeight: 500,
-            color: data.permissionProfile === "view-only" ? "#8b949e" : "#3fb950",
-            letterSpacing: "0.02em",
-          }}
-        >
-          {data.permissionProfile}
-        </span>
+        {!isScript && (
+          <>
+            <div style={{ fontSize: 12, color: "#c9d1d9", marginBottom: 2 }}>{data.model}</div>
+            <div style={{ fontSize: 12, color: "#8b949e", marginBottom: 8 }}>
+              {data.maxTurns} turns · ${data.budgetUsd}
+            </div>
+            <span
+              style={{
+                display: "inline-block",
+                padding: "2px 7px",
+                background: "#161b22",
+                border: "1px solid #30363d",
+                borderRadius: 12,
+                fontSize: 10,
+                fontWeight: 500,
+                color: data.permissionProfile === "view-only" ? "#8b949e" : "#3fb950",
+                letterSpacing: "0.02em",
+              }}
+            >
+              {data.permissionProfile}
+            </span>
+          </>
+        )}
+        {isScript && (
+          <div style={{ fontSize: 12, color: "#c9d1d9", fontStyle: "italic", textAlign: "center", marginTop: 8 }}>
+            Script Execution
+          </div>
+        )}
       </div>
 
-      {/* Source handles */}
+      {/* Clean Footer Handles */}
       <div
         style={{
           display: "flex",
           borderTop: "1px solid #30363d",
           background: headerBg,
+          position: "relative",
+          borderBottomLeftRadius: 8,
+          borderBottomRightRadius: 8,
         }}
       >
-        {STATUS_HANDLES.map((status, i) => (
-          <div
-            key={status}
+        <div style={{ flex: 1, position: "relative", textAlign: "center", padding: "8px 0", borderRight: "1px solid #30363d" }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: STATUS_COLORS.Fail }}>Fail</span>
+          <Handle
+            title="Fail"
+            type="source"
+            id="Fail"
+            position={Position.Bottom}
+            style={{ width: 14, height: 14, background: STATUS_COLORS.Fail, border: `2px solid ${headerBg}`, bottom: -7 }}
+          />
+        </div>
+
+        <div style={{ flex: 1, position: "relative", textAlign: "center", padding: "8px 0" }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: STATUS_COLORS.Pass }}>Pass</span>
+          <Handle
+            title="Pass"
+            type="source"
+            id="Pass"
+            position={Position.Bottom}
+            style={{ width: 14, height: 14, background: STATUS_COLORS.Pass, border: `2px solid ${headerBg}`, bottom: -7 }}
+          />
+        </div>
+
+        {/* The Decider / WaitUserInput Attachment */}
+        <div
+          title="Decider (WaitUserInput)"
+          style={{
+            position: "absolute",
+            right: -16,
+            top: -16,
+            width: 32,
+            height: 32,
+            background: "rgba(255, 255, 255, 0.05)",
+            border: "1px dashed #6e7681",
+            transform: "rotate(45deg)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.5)",
+            zIndex: 10,
+          }}
+        >
+          <div style={{ width: 8, height: 8, background: "#8b949e", borderRadius: "50%" }} />
+          <Handle
+            type="source"
+            id="WaitUserInput"
+            position={Position.Right}
             style={{
-              flex: 1,
-              position: "relative",
-              textAlign: "center",
-              padding: "5px 0 7px",
-              borderRight: i < STATUS_HANDLES.length - 1 ? "1px solid #30363d" : "none",
+              opacity: 0,
+              width: 32,
+              height: 32,
+              transform: "rotate(-45deg)", // Counter-rotate the hitbox
+              cursor: "crosshair",
             }}
-          >
-            <div
-              style={{
-                fontSize: 9,
-                color: STATUS_COLORS[status],
-                fontWeight: 600,
-                marginBottom: 3,
-                letterSpacing: "0.03em",
-              }}
-            >
-              {STATUS_LABELS[status]}
-            </div>
-            <Handle
-              type="source"
-              id={status}
-              position={Position.Bottom}
-              title={`Drag to connect on ${status}`}
-              style={{
-                position: "relative",
-                transform: "none",
-                left: "auto",
-                bottom: "auto",
-                top: "auto",
-                right: "auto",
-                display: "block",
-                margin: "0 auto",
-                width: 10,
-                height: 10,
-                background: STATUS_COLORS[status],
-                border: `2px solid ${headerBg}`,
-              }}
-            />
-          </div>
-        ))}
+          />
+        </div>
       </div>
     </div>
   );

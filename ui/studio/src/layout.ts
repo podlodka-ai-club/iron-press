@@ -6,11 +6,11 @@ const NODE_WIDTH = 220;
 const NODE_HEIGHT = 120;
 
 // Generic so callers preserve their node data type through the layout pass
-export function layoutNodes<T extends Node>(nodes: T[], edges: Edge[], direction: "TB" | "LR" = "TB"): T[] {
+export function layoutNodes<T extends Node>(nodes: T[], edges: Edge[], direction: "TB" | "LR" = "LR"): T[] {
   if (nodes.length === 0) return nodes;
 
   const g = new dagre.graphlib.Graph({ multigraph: true });
-  g.setGraph({ rankdir: direction, ranksep: 120, nodesep: 80 });
+  g.setGraph({ rankdir: direction, ranksep: 200, nodesep: 120 });
   g.setDefaultNodeLabel(() => ({}));
   g.setDefaultEdgeLabel(() => ({}));
 

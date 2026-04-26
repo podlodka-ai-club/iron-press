@@ -1,0 +1,109 @@
+{
+  "name": "sm",
+  "initialNodeId": "ba",
+  "nodes": [
+    {
+      "id": "ba",
+      "name": "Business Analyst",
+      "role": "business-analyst",
+      "model": "claude-haiku-4-5",
+      "maxTurns": 60,
+      "budgetUsd": 4,
+      "allowedTools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "WebFetch",
+        "mcp__linear__*",
+        "mcp__plugin_figma_figma__*"
+      ],
+      "disallowedTools": [
+        "Edit",
+        "Write",
+        "Bash",
+        "NotebookEdit"
+      ],
+      "permissionProfile": "view-only"
+    },
+    {
+      "id": "human",
+      "name": "Human",
+      "role": "human",
+      "model": "human",
+      "maxTurns": 1,
+      "budgetUsd": 0.1,
+      "allowedTools": [],
+      "disallowedTools": [],
+      "permissionProfile": "view-only"
+    },
+    {
+      "id": "worktree",
+      "name": "Worktree Script",
+      "role": "worktree-script",
+      "model": "script",
+      "maxTurns": 1,
+      "budgetUsd": 0.1,
+      "allowedTools": [],
+      "disallowedTools": [],
+      "permissionProfile": "safe-write"
+    },
+    {
+      "id": "eng",
+      "name": "Engineer",
+      "role": "engineer",
+      "model": "claude-haiku-4-5",
+      "maxTurns": 150,
+      "budgetUsd": 12,
+      "allowedTools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "WebFetch",
+        "Edit",
+        "Write",
+        "Bash",
+        "mcp__linear__*"
+      ],
+      "disallowedTools": [],
+      "permissionProfile": "safe-write"
+    },
+    {
+      "id": "pr",
+      "name": "Pull Request",
+      "role": "pull-request",
+      "model": "script",
+      "maxTurns": 1,
+      "budgetUsd": 0.1,
+      "allowedTools": [],
+      "disallowedTools": [],
+      "permissionProfile": "safe-write"
+    }
+  ],
+  "edges": [
+    {
+      "from": "ba",
+      "to": "human",
+      "onStatus": "WaitUserInput"
+    },
+    {
+      "from": "human",
+      "to": "ba",
+      "onStatus": "Pass"
+    },
+    {
+      "from": "ba",
+      "to": "worktree",
+      "onStatus": "Pass"
+    },
+    {
+      "from": "worktree",
+      "to": "eng",
+      "onStatus": "Pass"
+    },
+    {
+      "from": "eng",
+      "to": "pr",
+      "onStatus": "Pass"
+    }
+  ]
+}

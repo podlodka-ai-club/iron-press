@@ -425,4 +425,35 @@ const AGENT_TYPES = [
       permissionProfile: "safe-write",
     },
   },
+
+  {
+    role: "human",
+    label: "Human",
+    color: "red",
+    defaultNodeId: "human",
+    defaultSkill: "Please answer the question.",
+    defaultConfig: {
+      model: "human",
+      maxTurns: 1,
+      budgetUsd: 0.1,
+      allowedTools: [],
+      disallowedTools: [],
+      permissionProfile: "view-only",
+    },
+  },
+  {
+    role: "worktree-script",
+    label: "Worktree Script",
+    color: "purple",
+    defaultNodeId: "worktree",
+    defaultSkill: "",
+    defaultConfig: {
+      model: "script",
+      maxTurns: 1,
+      budgetUsd: 0.1,
+      allowedTools: [],
+      disallowedTools: [],
+      permissionProfile: "safe-write",
+    },
+  },
 ];

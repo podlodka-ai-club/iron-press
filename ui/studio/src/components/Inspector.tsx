@@ -26,6 +26,94 @@ const HR: React.CSSProperties = {
   margin: "14px 0",
 };
 
+const COMMON_TOOLS = [
+  "Read",
+  "Grep",
+  "Glob",
+  "WebFetch",
+  "Edit",
+  "Write",
+  "Bash",
+  "NotebookEdit",
+  "mcp__linear__*",
+  "mcp__plugin_figma_figma__*"
+];
+
+function ToolSelector({ 
+  label, 
+  selectedTools, 
+  onChange 
+}: { 
+  label: string; 
+  selectedTools: string[]; 
+  onChange: (tools: string[]) => void 
+}) {
+  const [customTool, setCustomTool] = useState("");
+
+  const toggleTool = (tool: string) => {
+    if (selectedTools.includes(tool)) {
+      onChange(selectedTools.filter(t => t !== tool));
+    } else {
+      onChange([...selectedTools, tool]);
+    }
+  };
+
+  const addCustomTool = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && customTool.trim()) {
+      e.preventDefault();
+      if (!selectedTools.includes(customTool.trim())) {
+        onChange([...selectedTools, customTool.trim()]);
+      }
+      setCustomTool("");
+    }
+  };
+
+  // Merge common tools and any custom tools already selected
+  const allTools = Array.from(new Set([...COMMON_TOOLS, ...selectedTools]));
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <span style={FIELD_LABEL}>{label}</span>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+        {allTools.map(tool => {
+          const isSelected = selectedTools.includes(tool);
+          return (
+            <button
+              key={tool}
+              onClick={() => toggleTool(tool)}
+              style={{
+                background: isSelected ? "rgba(56, 139, 253, 0.15)" : "#21262d",
+                border: isSelected ? "1px solid #388bfd" : "1px solid #30363d",
+                color: isSelected ? "#e6edf3" : "#8b949e",
+                padding: "3px 8px",
+                borderRadius: 12,
+                fontSize: 10,
+                cursor: "pointer",
+                transition: "all 0.15s",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4
+              }}
+            >
+              {isSelected && <span style={{ fontSize: 8, color: "#388bfd" }}>✓</span>}
+              {tool}
+            </button>
+          );
+        })}
+      </div>
+      <input
+        className="studio-input"
+        type="text"
+        placeholder="Add custom tool + Enter"
+        value={customTool}
+        onChange={(e) => setCustomTool(e.target.value)}
+        onKeyDown={addCustomTool}
+        style={{ fontSize: 11, padding: "6px 8px" }}
+      />
+    </div>
+  );
+}
+
 export function Inspector() {
   const selectedNodeId = useWorkflowStore((s) => s.selectedNodeId);
   const nodes = useWorkflowStore((s) => s.nodes);
@@ -179,33 +267,17 @@ export function Inspector() {
         {/* Tools section */}
         <div style={SECTION_LABEL}>Tools</div>
 
-        <label style={{ display: "block", marginBottom: 10 }}>
-          <span style={FIELD_LABEL}>Allowed</span>
-          <textarea
-            className="studio-textarea"
-            value={data.allowedTools.join(", ")}
-            onChange={(e) =>
-              updateNodeData(node.id, {
-                allowedTools: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
-              })
-            }
-            rows={3}
-          />
-        </label>
+        <ToolSelector 
+          label="Allowed Tools" 
+          selectedTools={data.allowedTools} 
+          onChange={(tools) => updateNodeData(node.id, { allowedTools: tools })} 
+        />
 
-        <label style={{ display: "block", marginBottom: 10 }}>
-          <span style={FIELD_LABEL}>Disallowed</span>
-          <textarea
-            className="studio-textarea"
-            value={data.disallowedTools.join(", ")}
-            onChange={(e) =>
-              updateNodeData(node.id, {
-                disallowedTools: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
-              })
-            }
-            rows={2}
-          />
-        </label>
+        <ToolSelector 
+          label="Disallowed Tools" 
+          selectedTools={data.disallowedTools} 
+          onChange={(tools) => updateNodeData(node.id, { disallowedTools: tools })} 
+        />
 
         <hr style={HR} />
 

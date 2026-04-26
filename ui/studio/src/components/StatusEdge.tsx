@@ -1,14 +1,15 @@
-import { BaseEdge, EdgeLabelRenderer, getBezierPath, type Edge, type EdgeProps } from "@xyflow/react";
+import { BaseEdge, EdgeLabelRenderer, getSmoothStepPath, type Edge, type EdgeProps } from "@xyflow/react";
 import type { NodeStatus } from "../types.js";
 
 const STATUS_COLORS: Record<NodeStatus, string> = {
   Pass: "#3fb950",
   Fail: "#f85149",
-  WaitUserInput: "#d29922",
+  WaitUserInput: "#8b949e", // Used to be yellow, now styled as Decider (grey)
 };
 
 interface StatusEdgeData extends Record<string, unknown> {
   onStatus: NodeStatus;
+  sourceRole?: string;
 }
 
 type StatusEdgeType = Edge<StatusEdgeData, "statusEdge">;
@@ -23,21 +24,32 @@ export function StatusEdge({
   targetPosition,
   data,
 }: EdgeProps<StatusEdgeType>) {
-  const [edgePath, labelX, labelY] = getBezierPath({
+  const status = data?.onStatus ?? "Pass";
+  const isWait = status === "WaitUserInput";
+  
+  const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX,
     sourceY,
     sourcePosition,
     targetX,
     targetY,
     targetPosition,
+    borderRadius: 16,
   });
 
-  const status = data?.onStatus ?? "Pass";
   const color = STATUS_COLORS[status] ?? "#a0aec0";
 
   return (
     <>
-      <BaseEdge id={id} path={edgePath} style={{ stroke: color, strokeWidth: 2 }} />
+      <BaseEdge 
+        id={id} 
+        path={edgePath} 
+        style={{ 
+          stroke: color, 
+          strokeWidth: 2,
+          strokeDasharray: isWait ? "5, 5" : "none" 
+        }} 
+      />
       <EdgeLabelRenderer>
         <div
           className="nodrag nopan"
@@ -54,7 +66,7 @@ export function StatusEdge({
             pointerEvents: "none",
           }}
         >
-          {status === "WaitUserInput" ? "Wait" : status}
+          {isWait ? "Wait/Decide" : status}
         </div>
       </EdgeLabelRenderer>
     </>
