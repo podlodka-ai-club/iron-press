@@ -5,13 +5,16 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { listRuns, readRun, readStage } from "./artifacts.js";
 import { tailFile } from "./tail.js";
+import { listJsonWorkflows, readWorkflow, workflowExists, writeWorkflow } from "./workflow-io.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const clientDir = path.join(__dirname, "client");
+const studioDistDir = path.join(__dirname, "studio", "dist");
 
 // Resolve runs dir via the orchestrator's config so we stay in lockstep.
 const orchestratorRoot = path.resolve(__dirname, "..");
+const WORKFLOWS_DIR = path.join(orchestratorRoot, "src", "workflows");
 const RUNS_DIR = process.env.ORCH_RUNS_DIR ?? path.join(orchestratorRoot, ".runs");
 
 const ARGS = process.argv.slice(2);
@@ -78,6 +81,95 @@ const server = createServer(async (req, res) => {
     m = pathname.match(/^\/api\/runs\/([^/]+)\/stages\/([^/]+)\/stream$/);
     if (req.method === "GET" && m) {
       return streamStage(req, res, m[1]!, m[2]!);
+    }
+
+    // ==========================================================================
+    // Studio static files — served before the monitoring SPA fallback
+    // ==========================================================================
+    if (req.method === "GET" && (pathname === "/studio" || pathname.startsWith("/studio/"))) {
+      const rel = pathname === "/studio" ? "index.html" : pathname.slice("/studio/".length);
+      const target = path.join(studioDistDir, rel);
+      // Protect against path traversal
+      if (!target.startsWith(studioDistDir)) return send(res, 400, "bad path");
+      if (existsSync(target) && statSync(target).isFile()) return sendFile(res, target);
+      // SPA fallback for client-side routing
+      return sendFile(res, path.join(studioDistDir, "index.html"), "text/html; charset=utf-8");
+    }
+
+    // ==========================================================================
+    // Studio API — /api/studio/*
+    // ==========================================================================
+
+    // GET /api/studio/agent-types
+    if (req.method === "GET" && pathname === "/api/studio/agent-types") {
+      return sendJson(res, 200, { agentTypes: AGENT_TYPES });
+    }
+
+    // GET /api/studio/workflows
+    if (req.method === "GET" && pathname === "/api/studio/workflows") {
+      const summaries = listJsonWorkflows(WORKFLOWS_DIR);
+      const bundles = summaries
+        .map((s) => readWorkflow(WORKFLOWS_DIR, s.name))
+        .filter((b) => b !== null);
+      return sendJson(res, 200, { workflows: bundles });
+    }
+
+    // GET /api/studio/workflows/:name
+    m = pathname.match(/^\/api\/studio\/workflows\/([^/]+)$/);
+    if (req.method === "GET" && m) {
+      const bundle = readWorkflow(WORKFLOWS_DIR, m[1]!);
+      if (!bundle) return sendJson(res, 404, { error: `workflow not found: ${m[1]}` });
+      return sendJson(res, 200, bundle);
+    }
+
+    // POST /api/studio/workflows — create new
+    if (req.method === "POST" && pathname === "/api/studio/workflows") {
+      let body: unknown;
+      try {
+        body = await readJsonBody(req);
+      } catch {
+        return sendJson(res, 400, { error: "invalid JSON body" });
+      }
+      const bundle = body as { name?: string; definition?: unknown; skills?: unknown };
+      if (!bundle.name || typeof bundle.name !== "string") {
+        return sendJson(res, 400, { error: "missing name" });
+      }
+      if (workflowExists(WORKFLOWS_DIR, bundle.name)) {
+        return sendJson(res, 409, { error: `workflow already exists: ${bundle.name}` });
+      }
+      try {
+        writeWorkflow(WORKFLOWS_DIR, {
+          name: bundle.name,
+          definition: bundle.definition as never,
+          skills: (bundle.skills ?? {}) as Record<string, string>,
+        });
+      } catch (err) {
+        return sendJson(res, 422, { error: err instanceof Error ? err.message : String(err) });
+      }
+      return sendJson(res, 201, { name: bundle.name });
+    }
+
+    // PUT /api/studio/workflows/:name — update existing
+    m = pathname.match(/^\/api\/studio\/workflows\/([^/]+)$/);
+    if (req.method === "PUT" && m) {
+      const name = m[1]!;
+      let body: unknown;
+      try {
+        body = await readJsonBody(req);
+      } catch {
+        return sendJson(res, 400, { error: "invalid JSON body" });
+      }
+      const bundle = body as { definition?: unknown; skills?: unknown };
+      try {
+        writeWorkflow(WORKFLOWS_DIR, {
+          name,
+          definition: bundle.definition as never,
+          skills: (bundle.skills ?? {}) as Record<string, string>,
+        });
+      } catch (err) {
+        return sendJson(res, 422, { error: err instanceof Error ? err.message : String(err) });
+      }
+      return sendJson(res, 200, { name });
     }
 
     // Anything else that's a plain GET falls back to the SPA shell so deep
@@ -268,3 +360,69 @@ async function openBrowser(url: string): Promise<void> {
   const opener = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
   spawn(opener, [url], { detached: true, stdio: "ignore" }).unref();
 }
+
+// =============================================================================
+// Body parsing
+// =============================================================================
+
+async function readBody(req: IncomingMessage): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (chunk: Buffer) => chunks.push(chunk));
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
+}
+
+async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+  const buf = await readBody(req);
+  return JSON.parse(buf.toString("utf8")) as unknown;
+}
+
+// =============================================================================
+// Agent type catalogue (used by GET /api/studio/agent-types)
+// =============================================================================
+
+function readSkill(nodeId: string): string {
+  const p = path.join(WORKFLOWS_DIR, "simple", "nodes", nodeId, "skill.md");
+  if (!existsSync(p)) return "";
+  try {
+    return readFileSync(p, "utf8");
+  } catch {
+    return "";
+  }
+}
+
+// Tool lists mirror src/workflows/simple/nodes/{ba,eng}/permissions.ts — keep in sync.
+const AGENT_TYPES = [
+  {
+    role: "business-analyst",
+    label: "Business Analyst",
+    color: "yellow",
+    defaultNodeId: "ba",
+    defaultSkill: readSkill("ba"),
+    defaultConfig: {
+      model: "claude-haiku-4-5",
+      maxTurns: 60,
+      budgetUsd: 4,
+      allowedTools: ["Read", "Grep", "Glob", "WebFetch", "mcp__linear__*", "mcp__plugin_figma_figma__*"],
+      disallowedTools: ["Edit", "Write", "Bash", "NotebookEdit"],
+      permissionProfile: "view-only",
+    },
+  },
+  {
+    role: "engineer",
+    label: "Engineer",
+    color: "orange",
+    defaultNodeId: "eng",
+    defaultSkill: readSkill("eng"),
+    defaultConfig: {
+      model: "claude-haiku-4-5",
+      maxTurns: 150,
+      budgetUsd: 12,
+      allowedTools: ["Read", "Grep", "Glob", "WebFetch", "Edit", "Write", "Bash", "mcp__linear__*"],
+      disallowedTools: [],
+      permissionProfile: "safe-write",
+    },
+  },
+];

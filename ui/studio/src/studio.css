@@ -1,0 +1,258 @@
+/* Studio global styles */
+
+* {
+  box-sizing: border-box;
+}
+
+/* Inputs, textareas, selects */
+.studio-input {
+  width: 100%;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 6px 8px;
+  color: #e6edf3;
+  font-size: 12px;
+  font-family: inherit;
+  transition: border-color 0.15s;
+}
+
+.studio-input:focus {
+  outline: none;
+  border-color: #58a6ff;
+}
+
+.studio-input::placeholder {
+  color: #6e7681;
+}
+
+.studio-textarea {
+  width: 100%;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 6px 8px;
+  color: #e6edf3;
+  font-size: 11px;
+  font-family: "SFMono-Regular", "Consolas", "Liberation Mono", monospace;
+  line-height: 1.5;
+  resize: vertical;
+  min-height: 64px;
+  transition: border-color 0.15s;
+}
+
+.studio-textarea:focus {
+  outline: none;
+  border-color: #58a6ff;
+}
+
+.studio-select {
+  width: 100%;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 6px 8px;
+  color: #e6edf3;
+  font-size: 12px;
+  font-family: inherit;
+  transition: border-color 0.15s;
+  cursor: pointer;
+}
+
+.studio-select:focus {
+  outline: none;
+  border-color: #58a6ff;
+}
+
+/* Library cards */
+.library-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  user-select: none;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.library-card-agent {
+  cursor: grab;
+}
+
+.library-card-agent:active {
+  cursor: grabbing;
+}
+
+.library-card-template {
+  cursor: pointer;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.library-card:hover {
+  background: #30363d;
+  border-color: #58a6ff80;
+}
+
+/* Toolbar buttons */
+.toolbar-btn {
+  padding: 0 12px;
+  height: 28px;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  color: #c9d1d9;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: background 0.12s, border-color 0.12s;
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.toolbar-btn:hover:not(:disabled) {
+  background: #30363d;
+  border-color: #8b949e;
+}
+
+.toolbar-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.toolbar-btn-primary {
+  background: #1a7f37;
+  border-color: #2ea043;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.toolbar-btn-primary:hover:not(:disabled) {
+  background: #238636;
+  border-color: #3fb950;
+}
+
+.toolbar-input {
+  height: 28px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 0 10px;
+  color: #e6edf3;
+  font-size: 12px;
+  font-family: "SFMono-Regular", "Consolas", "Liberation Mono", monospace;
+  transition: border-color 0.15s;
+  width: 160px;
+}
+
+.toolbar-input:focus {
+  outline: none;
+  border-color: #58a6ff;
+}
+
+.toolbar-input::placeholder {
+  color: #6e7681;
+}
+
+/* Dropdown */
+.toolbar-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  min-width: 190px;
+  z-index: 100;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.dropdown-item {
+  padding: 7px 12px;
+  font-size: 12px;
+  color: #c9d1d9;
+  cursor: pointer;
+  transition: background 0.1s;
+  font-family: inherit;
+}
+
+.dropdown-item:hover {
+  background: #21262d;
+  color: #e6edf3;
+}
+
+/* Inspector buttons */
+.inspector-start-btn {
+  width: 100%;
+  padding: 5px 10px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  color: #8b949e;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  font-family: inherit;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.inspector-start-btn:hover:not(:disabled) {
+  background: #21262d;
+  border-color: #58a6ff;
+  color: #e6edf3;
+}
+
+.inspector-start-btn.is-initial {
+  background: #0f2119;
+  border-color: #3fb950;
+  color: #3fb950;
+  cursor: default;
+}
+
+/* Copy button */
+.copy-btn {
+  padding: 2px 8px;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  color: #8b949e;
+  font-size: 10px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  font-family: inherit;
+}
+
+.copy-btn:hover {
+  background: #30363d;
+  color: #e6edf3;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #30363d;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #484f58;
+}

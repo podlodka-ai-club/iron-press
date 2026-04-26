@@ -18,7 +18,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "ui": "tsx ui/server.ts",
-    "ui:typecheck": "tsc -p tsconfig.ui.json --noEmit"
+    "ui:typecheck": "tsc -p tsconfig.ui.json --noEmit",
+    "build:studio": "pnpm --filter studio build",
+    "dev:studio": "pnpm --filter studio dev"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.0",
