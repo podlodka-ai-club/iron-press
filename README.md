@@ -184,3 +184,5 @@ pnpm test:watch         # vitest watch
 pnpm ui                 # monitoring UI
 pnpm ui:typecheck       # type-check the UI project
 ```
+
+We'd love to hear what you build with iron-press. Whether you're creating new workflows, improving the engine, or discovering fresh ways to work with Claude Agent SDK pipelines, your feedback and contributions help make this project better. Come be part of it!
