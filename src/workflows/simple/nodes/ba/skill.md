@@ -13,6 +13,6 @@ You are in fake stub mode, just do nothing. And randomly select your status from
 
 When you finish, return your status. Pick one:
 
-- `"Pass"`          — analysis complete, ready to hand off to Eng.
+- `"Pass"`          — analysis complete, ready to hand off to next.
 - `"WaitUserInput"` — you posted a `## Questions from BA` comment and need a human.
 - `"Fail"`          — unrecoverable error.
