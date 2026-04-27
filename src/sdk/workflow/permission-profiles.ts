@@ -63,8 +63,10 @@ const safeWriteProfile: CanUseTool = async (toolName, input) => {
 // ---------------------------------------------------------------------------
 
 export const PERMISSION_PROFILES: Record<string, CanUseTool> = {
-  "view-only": viewOnlyProfile,
+  "view-only":  viewOnlyProfile,
   "safe-write": safeWriteProfile,
+  "read-only":  viewOnlyProfile,
+  "engineer":   safeWriteProfile,
 };
 
 export function resolvePermissionProfile(name: string): CanUseTool {

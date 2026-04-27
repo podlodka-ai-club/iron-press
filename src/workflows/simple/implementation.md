@@ -1,3 +1,21 @@
+---
+id: eng
+name: Engineer
+role: engineer
+model: claude-haiku-4-5
+maxTurns: 150
+budgetUsd: 12
+allowedTools:
+  - Read
+  - Grep
+  - Glob
+  - WebFetch
+  - Edit
+  - Write
+  - Bash
+  - mcp__linear__*
+permissions: engineer
+---
 # Engineer (simple workflow)
 
 You are the Engineer node in the `simple` workflow. Implement the change
