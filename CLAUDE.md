@@ -132,6 +132,16 @@ Every run writes to `.runs/<runId>/`:
 
 Run id format: `YYYYMMDD-HHmmss-<rand>` (local time) so `ls` sorts chronologically.
 
+### Studio UI (`ui/studio/`)
+
+A visual workflow builder and runtime monitor built with React and React Flow (`@xyflow/react`).
+
+- **Layout:** Directed Acyclic Graph (DAG) using `dagre` (Left-to-Right routing). Edges use smooth step orthogonal routing.
+- **Node Configuration:** The `Inspector` provides a UI for defining node names, roles, models, budgets, and an interactive chip-based multiselect for tools.
+- **Storage:** Reads and writes workflows directly as JSON definition files to `src/workflows/<name>/workflow.json`.
+- **State:** Uses `zustand` for local graph state and features a custom `past`/`future` undo-redo history stack bound to `⌘Z` and `⌘⇧Z`.
+- **Backend:** `ui/server.ts` serves the pre-built React frontend and provides API routes for reading/writing `workflow.json` files and proxying SSE run logs.
+
 ### Github client (`src/github/`)
 
 `GithubClient` wraps Octokit for issue and PR reads. Paginated, handles comment truncation and null-safety edge cases. Use this rather than calling `@octokit/rest` directly.

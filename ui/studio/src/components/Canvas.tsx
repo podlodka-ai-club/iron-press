@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useRef } from "react";
 import { ReactFlow, Background, Controls, MiniMap } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { AgentNode } from "./AgentNode.js";
 import { StatusEdge } from "./StatusEdge.js";
 import { useWorkflowStore } from "../store/workflowStore.js";
+import { useWorkflowShortcuts } from "../hooks/useWorkflowShortcuts.js";
+import { ROLE_COLORS, ROLE_COLOR_FALLBACK, DROP_OFFSET_X, DROP_OFFSET_Y } from "../constants.js";
 import type { AgentTypeInfo, BuilderNodeData } from "../types.js";
 
 const nodeTypes = { agentNode: AgentNode };
@@ -26,26 +28,7 @@ export function Canvas({ agentTypes }: Props) {
   const redo = useWorkflowStore((s) => s.redo);
   const flowRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if typing in inputs
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        return;
-      }
-      
-      if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
-        if (e.shiftKey) {
-          e.preventDefault();
-          redo();
-        } else {
-          e.preventDefault();
-          undo();
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo]);
+  useWorkflowShortcuts({ undo, redo });
 
   const onDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -61,10 +44,9 @@ export function Canvas({ agentTypes }: Props) {
       const agentType = agentTypes.find((a) => a.role === role);
       if (!agentType) return;
 
-      // Convert drop position to flow coordinates
       const rect = flowRef.current?.getBoundingClientRect();
       if (!rect) return;
-      const position = { x: e.clientX - rect.left - 110, y: e.clientY - rect.top - 60 };
+      const position = { x: e.clientX - rect.left - DROP_OFFSET_X, y: e.clientY - rect.top - DROP_OFFSET_Y };
       addNodeFromPalette(agentType, position);
     },
     [agentTypes, addNodeFromPalette],
@@ -90,13 +72,7 @@ export function Canvas({ agentTypes }: Props) {
         <MiniMap
           nodeColor={(n) => {
             const role = (n.data as BuilderNodeData | undefined)?.role;
-            const colors: Record<string, string> = {
-              "business-analyst": "#e3b341",
-              engineer: "#f0883e",
-              "tech-lead": "#388bfd",
-              "product-owner": "#a371f7",
-            };
-            return role ? (colors[role] ?? "#4a5568") : "#4a5568";
+            return role ? (ROLE_COLORS[role] ?? ROLE_COLOR_FALLBACK) : ROLE_COLOR_FALLBACK;
           }}
           style={{ background: "#161b22", border: "1px solid #30363d" }}
         />

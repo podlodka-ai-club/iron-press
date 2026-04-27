@@ -1,9 +1,6 @@
 import dagre from "@dagrejs/dagre";
-import type { Edge } from "@xyflow/react";
-import type { Node } from "@xyflow/react";
-
-const NODE_WIDTH = 220;
-const NODE_HEIGHT = 120;
+import type { Edge, Node } from "@xyflow/react";
+import { NODE_LAYOUT_WIDTH, NODE_LAYOUT_HEIGHT } from "./constants.js";
 
 // Generic so callers preserve their node data type through the layout pass
 export function layoutNodes<T extends Node>(nodes: T[], edges: Edge[], direction: "TB" | "LR" = "LR"): T[] {
@@ -15,7 +12,7 @@ export function layoutNodes<T extends Node>(nodes: T[], edges: Edge[], direction
   g.setDefaultEdgeLabel(() => ({}));
 
   for (const node of nodes) {
-    g.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
+    g.setNode(node.id, { width: NODE_LAYOUT_WIDTH, height: NODE_LAYOUT_HEIGHT });
   }
   for (const edge of edges) {
     g.setEdge(edge.source, edge.target, {}, edge.id);
@@ -26,6 +23,6 @@ export function layoutNodes<T extends Node>(nodes: T[], edges: Edge[], direction
   return nodes.map((node) => {
     const pos = g.node(node.id) as { x: number; y: number } | undefined;
     if (!pos) return node;
-    return { ...node, position: { x: pos.x - NODE_WIDTH / 2, y: pos.y - NODE_HEIGHT / 2 } };
+    return { ...node, position: { x: pos.x - NODE_LAYOUT_WIDTH / 2, y: pos.y - NODE_LAYOUT_HEIGHT / 2 } };
   });
 }

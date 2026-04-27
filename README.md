@@ -62,6 +62,21 @@ tests/
 ui/                           monitoring UI (tsx ui/server.ts)
 ```
 
+## Studio UI
+
+The orchestrator includes a visual, node-based workflow editor ("Studio") built with React and React Flow. It allows you to:
+
+- Visually design workflows (Left-to-Right DAG layout).
+- Configure node parameters via the Inspector (Model, Max Turns, Budget, Allowed/Disallowed tools).
+- Connect edges between nodes based on SDK statuses (`Pass`, `Fail`, `WaitUserInput`).
+- View and manage your workflow definitions interactively without writing code.
+
+**To run the Studio UI:**
+```bash
+pnpm ui
+```
+This spawns a proxy server on port `4455` and serves the frontend. The CLI will automatically open `http://localhost:4455/studio` in your browser.
+
 ## Workflow engine
 
 `src/sdk/workflow/` — a typed, Graphology-backed engine. Nodes are connected by **status-labeled edges**.

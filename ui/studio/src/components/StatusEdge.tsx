@@ -1,11 +1,6 @@
 import { BaseEdge, EdgeLabelRenderer, getSmoothStepPath, type Edge, type EdgeProps } from "@xyflow/react";
 import type { NodeStatus } from "../types.js";
-
-const STATUS_COLORS: Record<NodeStatus, string> = {
-  Pass: "#3fb950",
-  Fail: "#f85149",
-  WaitUserInput: "#8b949e", // Used to be yellow, now styled as Decider (grey)
-};
+import { STATUS_COLORS, STATUS_COLOR_FALLBACK } from "../constants.js";
 
 interface StatusEdgeData extends Record<string, unknown> {
   onStatus: NodeStatus;
@@ -37,7 +32,7 @@ export function StatusEdge({
     borderRadius: 16,
   });
 
-  const color = STATUS_COLORS[status] ?? "#a0aec0";
+  const color = STATUS_COLORS[status] ?? STATUS_COLOR_FALLBACK;
 
   return (
     <>

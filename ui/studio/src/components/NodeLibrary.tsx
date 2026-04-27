@@ -1,18 +1,11 @@
 import type { AgentTypeInfo, WorkflowBundle } from "../types.js";
 import { useWorkflowStore } from "../store/workflowStore.js";
+import { ROLE_COLORS, ROLE_COLOR_FALLBACK } from "../constants.js";
 
 interface Props {
   agentTypes: AgentTypeInfo[];
   workflows: WorkflowBundle[];
 }
-
-const ROLE_COLORS: Record<string, string> = {
-  "business-analyst": "#e3b341",
-  engineer: "#f0883e",
-  "tech-lead": "#388bfd",
-  "product-owner": "#a371f7",
-  "pull-request": "#3fb950",
-};
 
 const SECTION_HEADER: React.CSSProperties = {
   padding: "10px 14px 6px",
@@ -70,7 +63,7 @@ export function NodeLibrary({ agentTypes, workflows }: Props) {
                 width: 8,
                 height: 8,
                 borderRadius: "50%",
-                background: ROLE_COLORS[a.role] ?? "#8b949e",
+                background: ROLE_COLORS[a.role] ?? ROLE_COLOR_FALLBACK,
                 flexShrink: 0,
               }}
             />
