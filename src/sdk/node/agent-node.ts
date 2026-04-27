@@ -1,10 +1,19 @@
 import { writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import type { CanUseTool } from "@anthropic-ai/claude-agent-sdk";
-import { NodeStatusSchema, type Node, type NodeContext, type NodeStatus } from "@/sdk/workflow";
+import {
+  NodeStatusSchema,
+  type Node,
+  type NodeContext,
+  type NodeStatus,
+} from "@/sdk/workflow";
 import { stableSessionId, runSession } from "@/sdk/session";
 import { logToolHook } from "./hooks";
 import type { RunLog, StageDir } from "@/runs/run-log";
+import { loadSkillWithFrontmatter as loadMarkdownWithFrontmatter } from "@/util/skill-loader";
+import { resolvePermissionProfile } from "@/sdk/workflow/permission-profiles";
+import { childLogger, type Logger } from "@/util/logger";
 
 export interface AgentNodeConfig {
   /** Workflow-unique id used by edges. */
@@ -26,12 +35,6 @@ export interface AgentNodeConfig {
   canUseTool: CanUseTool;
 }
 
-// ---------------------------------------------------------------------------
-// JSON schema used for SDK structured output. Guarantees the agent's final
-// `result` message carries a parseable `{ status }` payload — the SDK
-// validates the shape and retries internally on violations.
-// ---------------------------------------------------------------------------
-
 const SESSION_OUTPUT_SCHEMA: Record<string, unknown> = {
   type: "object",
   properties: {
@@ -43,24 +46,16 @@ const SESSION_OUTPUT_SCHEMA: Record<string, unknown> = {
 
 const StatusResponseSchema = z.object({ status: NodeStatusSchema });
 
-/**
- * Generic agent-style workflow node.
- *
- * Owns the full SDK-session lifecycle: opens a stage directory, runs one
- * `query()` with structured output locked to `{ status: NodeStatus }`, writes
- * transcript + prompt + result artifacts, and returns the status the agent
- * emitted. Concrete node modules (BaNode, EngNode, …) extend this class and
- * hand a hard-coded AgentNodeConfig to the constructor.
- */
-export class AgentNode<TState extends { issueId: string; runId: string }>
-  implements Node<TState>
-{
+export class AgentNode<
+  TState extends { issueId: string; runId: string },
+> implements Node<TState> {
   readonly id: string;
   readonly name: string;
 
   private readonly _config: AgentNodeConfig;
   private readonly _runLog: RunLog;
   private readonly _cwd: string;
+  private readonly _log: Logger;
 
   constructor(config: AgentNodeConfig, runLog: RunLog, cwd: string) {
     this.id = config.id;
@@ -68,11 +63,34 @@ export class AgentNode<TState extends { issueId: string; runId: string }>
     this._config = config;
     this._runLog = runLog;
     this._cwd = cwd;
+    this._log = childLogger({ nodeId: config.id, role: config.role });
   }
 
-  // ---------------------------------------------------------------------------
-  // Node contract
-  // ---------------------------------------------------------------------------
+  static fromMd<TState extends { issueId: string; runId: string }>(
+    mdUrl: URL,
+    runLog: RunLog,
+    cwd: string,
+  ): AgentNode<TState> {
+    const { frontmatter, body } = loadMarkdownWithFrontmatter(
+      fileURLToPath(mdUrl),
+    );
+    return new AgentNode<TState>(
+      {
+        id: frontmatter.id,
+        name: frontmatter.name,
+        role: frontmatter.role,
+        prompt: body,
+        model: frontmatter.model,
+        maxTurns: frontmatter.maxTurns,
+        budgetUsd: frontmatter.budgetUsd,
+        allowedTools: frontmatter.allowedTools,
+        disallowedTools: frontmatter.disallowedTools,
+        canUseTool: resolvePermissionProfile(frontmatter.permissions),
+      },
+      runLog,
+      cwd,
+    );
+  }
 
   async execute(ctx: NodeContext<TState>): Promise<{ status: NodeStatus }> {
     const dir = this._runLog.openStage({
@@ -92,6 +110,7 @@ export class AgentNode<TState extends { issueId: string; runId: string }>
       `# Prompt (role=${this._config.role}, session=${sessionId})\n\n${prompt}`,
     );
 
+    this._log.info({ sessionId, issueId: ctx.state.issueId }, "session starting");
     const resultMsg = await runSession({
       cwd: this._cwd,
       sessionId,
@@ -130,21 +149,9 @@ export class AgentNode<TState extends { issueId: string; runId: string }>
     return { status };
   }
 
-  // ---------------------------------------------------------------------------
-  // User prompt rendering
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Render the node's `skill.md` template into the per-turn user prompt by
-   * substituting `{{issueId}}`. Shared across every agent node.
-   */
   protected _buildPrompt(ctx: NodeContext<TState>): string {
     return this._config.prompt.replaceAll("{{issueId}}", ctx.state.issueId);
   }
-
-  // ---------------------------------------------------------------------------
-  // Internal — result persistence
-  // ---------------------------------------------------------------------------
 
   private _writeResult(
     dir: StageDir,
@@ -154,6 +161,19 @@ export class AgentNode<TState extends { issueId: string; runId: string }>
   ): void {
     const costUsd = Number(resultMsg.total_cost_usd ?? 0);
     const usage = (resultMsg.usage ?? {}) as Record<string, number | undefined>;
+    this._log.info(
+      {
+        status,
+        costUsd,
+        tokens: {
+          input: Number(usage.input_tokens ?? 0),
+          output: Number(usage.output_tokens ?? 0),
+          cacheRead: Number(usage.cache_read_input_tokens ?? 0),
+          cacheCreation: Number(usage.cache_creation_input_tokens ?? 0),
+        },
+      },
+      "session complete",
+    );
     writeFileSync(
       dir.resultPath,
       JSON.stringify(
@@ -175,7 +195,12 @@ export class AgentNode<TState extends { issueId: string; runId: string }>
     );
   }
 
-  private _writeFailed(dir: StageDir, sessionId: string, message: string): NodeStatus {
+  private _writeFailed(
+    dir: StageDir,
+    sessionId: string,
+    message: string,
+  ): NodeStatus {
+    this._log.warn({ message, sessionId }, "session failed");
     try {
       writeFileSync(
         dir.resultPath,
