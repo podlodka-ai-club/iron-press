@@ -82,6 +82,7 @@ export function simpleWorkflow(
     .addNode(
       new PullRequestNode<SimpleWorkflowState>(
         {
+          cwd: wfConfig.cwd,
           resolve: (state) => ({
             owner,
             repo,
