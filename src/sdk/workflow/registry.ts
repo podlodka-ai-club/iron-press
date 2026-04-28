@@ -13,9 +13,15 @@ import { loadWorkflowFromJson } from "./dynamic-loader.js";
 
 export type WorkflowState = { issueId: string; runId: string };
 
+export type WorkflowRunOptions = {
+  baseBranch?: string;
+  branchPrefix?: string;
+};
+
 export type WorkflowFactory<TState = WorkflowState> = (
   runLog: RunLog,
   cwd: string,
+  opts?: WorkflowRunOptions,
 ) => Workflow<TState>;
 
 // Lazy-load workflows to break circular dependencies. The workflow registry

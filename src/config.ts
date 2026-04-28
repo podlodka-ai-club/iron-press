@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync, readFileSync } from "node:fs";
+import { AppConfigSchema, type AppConfig } from "./config/app-config-schema.js";
 
 // Resolve the orchestrator's own location (.claude/orchestrator/src/config.ts)
 const __filename = fileURLToPath(import.meta.url);
@@ -32,6 +33,21 @@ function loadEnvFile(): void {
 }
 loadEnvFile();
 
+function loadAppConfig(): AppConfig | undefined {
+  const configPath = path.join(orchestratorRoot, "iron-press.config.json");
+  if (!existsSync(configPath)) return undefined;
+  try {
+    const raw = JSON.parse(readFileSync(configPath, "utf8")) as unknown;
+    return AppConfigSchema.parse(raw);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(`[iron-press] Failed to load iron-press.config.json: ${(err as Error).message}`);
+    return undefined;
+  }
+}
+
+const appConfig = loadAppConfig();
+
 export const config = {
   workspaceRoot: process.env.WORKSPACE_ROOT ?? defaultWorkspaceRoot,
   orchestratorRoot,
@@ -47,12 +63,18 @@ export const config = {
 
   maxRunUsd: Number(process.env.MAX_RUN_USD ?? "50"),
 
-  // Polling configuration
-  pollingTeamId: process.env.POLL_TEAM_ID ?? "",
-  pollingProjectId: process.env.POLL_PROJECT_ID ?? "",
-  pollingIntervalMs: Number(process.env.POLL_INTERVAL_MS ?? "30000"),
-  pollingIncludeStatuses: (process.env.POLL_INCLUDE_STATUSES ?? "Backlog").split(",").map(s => s.trim()),
-  pollingExcludeStatuses: (process.env.POLL_EXCLUDE_STATUSES ?? "Done,Canceled").split(",").map(s => s.trim()),
+  appConfig,
+
+  // Polling configuration — JSON config takes priority over env vars
+  pollingTeamId: appConfig?.linear?.teamId ?? process.env.POLL_TEAM_ID ?? "",
+  pollingProjectId: appConfig?.linear?.projectId ?? process.env.POLL_PROJECT_ID ?? "",
+  pollingIntervalMs: appConfig?.linear?.pollIntervalMs ?? Number(process.env.POLL_INTERVAL_MS ?? "30000"),
+  pollingIncludeStatuses:
+    appConfig?.linear?.includeStatuses ??
+    (process.env.POLL_INCLUDE_STATUSES ?? "Backlog").split(",").map((s) => s.trim()),
+  pollingExcludeStatuses:
+    appConfig?.linear?.excludeStatuses ??
+    (process.env.POLL_EXCLUDE_STATUSES ?? "Done,Canceled").split(",").map((s) => s.trim()),
 
   // Keyword list — if any appears in a BA question, never auto-dispatch PO even in --lead=po.
   sensitiveKeywords: [

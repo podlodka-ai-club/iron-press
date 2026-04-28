@@ -17,6 +17,7 @@ import { assertConfig, config } from "@/config";
 import { logger } from "@/util/logger";
 import { LinearClient } from "@/linear/linear-client";
 import { pollForNewIssues } from "@/polling/poller";
+import { prepareRepository } from "@/git/repo-manager";
 
 async function main(): Promise<void> {
   // Discover workflow.json-based workflows and merge them in. Static workflows
@@ -36,13 +37,13 @@ async function main(): Promise<void> {
       `workflow to run (${available}); defaults to "${DEFAULT_WORKFLOW}" when only an issue id is given`,
     )
     .argument("[issueId]", "Linear issue identifier, e.g. ENG-123")
-    .option("--cwd <path>", "working directory the SDK session runs in", process.cwd())
+    .option("--cwd <path>", "working directory the SDK session runs in")
     .option("--run-id <id>", "reuse an existing .runs/<id> directory (resumes stage counter)")
     .option("--poll", "poll for new issues and run workflows in a loop")
     .option("--resume <nodeId>", "resume a suspended run from the given node (requires --run-id)")
     .parse(process.argv);
 
-  const opts = program.opts<{ cwd: string; runId?: string; poll?: boolean; resume?: string }>();
+  const opts = program.opts<{ cwd?: string; runId?: string; poll?: boolean; resume?: string }>();
 
   // Handle polling mode
   if (opts.poll) {
@@ -84,19 +85,21 @@ async function main(): Promise<void> {
 
   assertConfig();
 
+  const cwd = opts.cwd ?? process.cwd();
+
   const runLog = createRunLog({
     runId: opts.runId,
     rootInput: issueId,
-    flags: { workflow: workflowName, cwd: opts.cwd },
+    flags: { workflow: workflowName, cwd },
     resume: Boolean(opts.runId),
   });
 
   logger.info(
-    { runId: runLog.runId, workflow: workflowName, issueId, cwd: opts.cwd },
+    { runId: runLog.runId, workflow: workflowName, issueId, cwd },
     "workflow starting",
   );
 
-  const workflow = factory(runLog, opts.cwd);
+  const workflow = factory(runLog, cwd);
   const engine = new GraphologyEngine<WorkflowState>();
   const workflowStatePath = path.join(runLog.runDir, "workflow-state.json");
 
@@ -173,7 +176,7 @@ async function main(): Promise<void> {
   }
 }
 
-async function runPollingMode(cwd: string): Promise<void> {
+async function runPollingMode(cwdOverride?: string): Promise<void> {
   const linearClient = new LinearClient(config.linearApiKey, logger);
 
   logger.info(
@@ -196,6 +199,21 @@ async function runPollingMode(cwd: string): Promise<void> {
         logger.info({ issueId: issue.id, issueTitle: issue.title }, "processing polled issue");
 
         try {
+          let cwd: string;
+          if (cwdOverride) {
+            cwd = cwdOverride;
+          } else if (config.appConfig?.repository) {
+            logger.info(
+              { url: config.appConfig.repository.url },
+              "preparing repository",
+            );
+            cwd = prepareRepository(config.appConfig.repository);
+          } else {
+            throw new Error(
+              "No repository configured. Pass --cwd or set repository.url in iron-press.config.json",
+            );
+          }
+
           const runLog = createRunLog({
             rootInput: issue.id,
             flags: { workflow: DEFAULT_WORKFLOW, cwd, polling: true },
@@ -203,12 +221,15 @@ async function runPollingMode(cwd: string): Promise<void> {
           });
 
           logger.info(
-            { runId: runLog.runId, workflow: DEFAULT_WORKFLOW, issueId: issue.id },
+            { runId: runLog.runId, workflow: DEFAULT_WORKFLOW, issueId: issue.id, cwd },
             "workflow starting for polled issue",
           );
 
           const factory = getWorkflow(DEFAULT_WORKFLOW);
-          const workflow = factory(runLog, cwd);
+          const workflow = factory(runLog, cwd, {
+            baseBranch: config.appConfig?.repository?.baseBranch,
+            branchPrefix: config.appConfig?.repository?.branchPrefix,
+          });
           const engine = new GraphologyEngine<WorkflowState>();
 
           const pollEngineHooks = {

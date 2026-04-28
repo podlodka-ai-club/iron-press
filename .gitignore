@@ -1,6 +1,9 @@
 # ENV
 .env
 
+# Local app config (copy iron-press.config.json.example to iron-press.config.json and fill in)
+iron-press.config.json
+
 # Local config files
 *.local
 *.local.*
