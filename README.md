@@ -186,3 +186,7 @@ pnpm ui:typecheck       # type-check the UI project
 ```
 
 We'd love to hear what you build with iron-press. Whether you're creating new workflows, improving the engine, or discovering fresh ways to work with Claude Agent SDK pipelines, your feedback and contributions help make this project better. Come be part of it!
+
+## Get Started
+
+Join our community! Whether you're exploring iron-press for the first time or looking to contribute, we're excited to have you. Try it out, build workflows, and let us know what you create — we'd love to hear from you.
