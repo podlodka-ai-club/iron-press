@@ -10,6 +10,8 @@ pnpm do <issueId>                              # run the default workflow on a L
 pnpm do <workflowName> <issueId>               # run a specific workflow
 pnpm do <issueId> --cwd <path>                 # set the cwd the SDK session runs in
 pnpm do <issueId> --run-id <id>                # reuse an existing .runs/<id> directory (stage counter resumes)
+pnpm do <issueId> --run-id <id> --resume <nodeId>  # resume a suspended run from a specific node
+pnpm do --poll                                 # poll Linear continuously for new issues to process
 pnpm build                                     # compile TypeScript → dist/
 pnpm typecheck                                 # type-check only (no emit)
 pnpm test                                      # run all vitest suites
@@ -20,7 +22,7 @@ pnpm ui:typecheck                              # type-check the UI project
 
 A pre-commit hook (`.husky/pre-commit`) runs `pnpm typecheck && pnpm test` before every commit and blocks it on failure.
 
-CLI behaviour: `pnpm do` with a single arg treats it as an issue id and picks `DEFAULT_WORKFLOW` (`simple`). Two args is `<workflowName> <issueId>`.
+CLI behaviour: `pnpm do` with a single arg treats it as an issue id and picks `DEFAULT_WORKFLOW` (`simple`). Two args is `<workflowName> <issueId>`. `--resume <nodeId>` requires `--run-id` and resumes from the named node using saved state.
 
 ## Architecture
 
@@ -54,9 +56,9 @@ Graphology-backed engine for modelling control flow as a directed graph.
 **Key exports** from `src/sdk/workflow/index.ts`:
 - `Node<TState>` / `NodeContext<TState>` — interfaces for implementing nodes
 - `WorkflowBuilder<TState>` — fluent builder: `addNode` → `addEdge` → `setInitialNode` → `build()`
-- `GraphologyEngine<TState>` — concrete `Engine` implementation; accepts `EngineHooks` and `EngineOptions` (`maxVisitsPerNode`, default 100)
+- `GraphologyEngine<TState>` — concrete `Engine` implementation; accepts `EngineHooks` and `EngineOptions` (`maxVisitsPerNode`, default 100). Exposes `.run()` and `.resume(workflow, startNodeId, initialState)` for resuming suspended runs.
 - `WorkflowError` — typed error with `kind`: `"MISSING_INITIAL_NODE" | "VISIT_LIMIT_EXCEEDED" | "VALIDATION_FAILED"`
-- `WORKFLOWS`, `DEFAULT_WORKFLOW`, `getWorkflow`, `availableWorkflowNames` — workflow registry
+- `WORKFLOWS`, `DEFAULT_WORKFLOW`, `getWorkflow`, `availableWorkflowNames` — workflow registry (includes dynamic JSON-based workflows discovered by `discoverDynamicWorkflows()`)
 
 ### Agent nodes (`src/sdk/node/`)
 
@@ -70,33 +72,53 @@ Graphology-backed engine for modelling control flow as a directed graph.
 
 Concrete nodes pass a hard-coded `AgentNodeConfig` to the super constructor — they don't override `execute`.
 
-### Node folder convention
+**`AgentNode.fromMd(url, runLog, cwd)`** — factory that reads a markdown file, parses its YAML frontmatter (`id`, `name`, `role`, `model`, `maxTurns`, `budgetUsd`, `allowedTools`, `disallowedTools`, `permissions`), and uses the body as the prompt template. This is the preferred pattern for new LLM-backed nodes.
 
-Each node lives in its own directory with three files:
+**Deterministic nodes** (no SDK session) also live in `src/sdk/node/`:
+- `CreateBranchNode<TState>` — runs `git checkout -b <branch>` and pushes to origin; reads branch name and base from `WorkflowConfig`.
+- `PullRequestNode<TState>` — creates a GitHub PR via `GithubClient`; reads title, body, and branch from state.
+
+### Node definition patterns
+
+**Preferred — markdown-driven (used by `simple` workflow):**
+
+```
+src/workflows/<workflow>/
+├── <node-id>.md    — YAML frontmatter + prompt body
+└── config.ts       — WorkflowConfig (cwd, baseBranch, branchPrefix, …)
+```
+
+The frontmatter in `<node-id>.md` carries all config: `id`, `name`, `role`, `model`, `maxTurns`, `budgetUsd`, `allowedTools`, `disallowedTools`, `permissions`. The body is the prompt template (supports `{{issueId}}` substitution). Loaded via `AgentNode.fromMd(new URL("node.md", import.meta.url), runLog, cwd)`.
+
+**Legacy — class-per-node (used by `sm` and `simple-json` workflows):**
 
 ```
 src/workflows/<workflow>/nodes/<node>/
 ├── index.ts        — class extending AgentNode; imports permissions + skill.md
-├── skill.md        — user prompt template (supports {{issueId}} substitution)
+├── skill.md        — user prompt template
 └── permissions.ts  — allowedTools, disallowedTools, canUseTool guard
 ```
 
-`skill.md` is loaded at module init via `loadSkill(import.meta.url, "skill.md")`. Permissions are **per-node**, not global — they ship next to the node they protect.
+Permissions are **per-node** in both patterns — they ship next to the node they protect.
 
 ### Workflow definition (`src/workflows/<name>/workflow.ts`)
 
-A workflow is a `WorkflowFactory`: `(runLog, cwd) => Workflow<State>`. Example (`src/workflows/simple/workflow.ts`):
+A workflow is a `WorkflowFactory`: `(runLog, cwd) => Workflow<State>`. The `simple` workflow example (`src/workflows/simple/workflow.ts`):
 
 ```ts
 new WorkflowBuilder<SimpleWorkflowState>()
-  .addNode(new BaNode(runLog, cwd))
-  .addNode(new EngNode(runLog, cwd))
-  .addEdge("ba", "eng", "Pass")
+  .addNode(AgentNode.fromMd(new URL("clarification.md", import.meta.url), runLog, cwd))
+  .addNode(new CreateBranchNode(runLog, cwd, config))
+  .addNode(AgentNode.fromMd(new URL("implementation.md", import.meta.url), runLog, cwd))
+  .addNode(new PullRequestNode(runLog, cwd, config))
+  .addEdge("ba", "create-branch", "Pass")
+  .addEdge("create-branch", "eng", "Pass")
+  .addEdge("eng", "pull-request", "Pass")
   .setInitialNode("ba")
   .build();
 ```
 
-Register the factory in `src/sdk/workflow/registry.ts` (`WORKFLOWS`) to make it runnable via `pnpm do <name> <issueId>`.
+Register the factory in `src/sdk/workflow/registry.ts` (`WORKFLOWS`) to make it runnable via `pnpm do <name> <issueId>`. Workflows can also be defined as `workflow.json` files — these are discovered automatically by `discoverDynamicWorkflows()` and do not require manual registration.
 
 ### SDK session (`src/sdk/session/`)
 
@@ -157,7 +179,10 @@ A visual workflow builder and runtime monitor built with React and React Flow (`
 
 All suites pass (`pnpm test`):
 - `tests/state/classify.test.ts` — title/label regex classifiers (`src/state/classify.ts`).
-- `tests/sdk/workflow/engine.test.ts` — workflow engine edge-matching logic.
+- `tests/sdk/workflow/engine.test.ts` — workflow engine edge-matching and suspend/resume logic.
+- `tests/sdk/node/agent-node.test.ts` — `AgentNode` lifecycle, `fromMd` factory, prompt building.
+- `tests/sdk/node/create-branch-node.test.ts` — `CreateBranchNode` git checkout behavior.
+- `tests/sdk/node/pull-request-node.test.ts` — `PullRequestNode` GitHub PR creation.
 - `tests/ui/status.test.ts`, `tests/ui/artifacts.test.ts`, `tests/ui/tail.test.ts` — UI-layer helpers in `ui/`.
 
-When changing the workflow engine or `AgentNode`, write tests against `src/sdk/workflow/`. Every branch of the engine's edge-matching logic should have a positive and negative case.
+When changing the workflow engine or `AgentNode`, write tests against `src/sdk/workflow/` and `src/sdk/node/`. Every branch of the engine's edge-matching logic should have a positive and negative case.
