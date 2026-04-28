@@ -274,6 +274,41 @@ describe("cycle detection", () => {
 });
 
 // ---------------------------------------------------------------------------
+// resume() — start from a custom node instead of the initial node
+// ---------------------------------------------------------------------------
+
+describe("resume", () => {
+  function buildLinear() {
+    return new WorkflowBuilder<State>()
+      .addNode({ id: "a", name: "A", execute: async (ctx) => { ctx.state.log.push("a"); return { status: "Pass" }; } })
+      .addNode({ id: "b", name: "B", execute: async (ctx) => { ctx.state.log.push("b"); return { status: "Pass" }; } })
+      .addNode({ id: "c", name: "C", execute: async (ctx) => { ctx.state.log.push("c"); return { status: "Pass" }; } })
+      .addEdge("a", "b", "Pass")
+      .addEdge("b", "c", "Pass")
+      .setInitialNode("a")
+      .build();
+  }
+
+  it("skips earlier nodes and begins execution from the specified node", async () => {
+    const result = await new GraphologyEngine<State>().resume(buildLinear(), "b", makeState());
+    expect(result.finalState.log).toEqual(["b", "c"]);
+    expect(result.history.map((h) => h.nodeId)).toEqual(["b", "c"]);
+  });
+
+  it("resumes from the last node with no outgoing edges", async () => {
+    const result = await new GraphologyEngine<State>().resume(buildLinear(), "c", makeState());
+    expect(result.finalState.log).toEqual(["c"]);
+    expect(result.exitReason).toBe("no-matching-edge");
+  });
+
+  it("throws MISSING_INITIAL_NODE when startNodeId does not exist", async () => {
+    await expect(
+      new GraphologyEngine<State>().resume(buildLinear(), "ghost", makeState()),
+    ).rejects.toMatchObject({ kind: "MISSING_INITIAL_NODE" });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Builder validation errors
 // ---------------------------------------------------------------------------
 

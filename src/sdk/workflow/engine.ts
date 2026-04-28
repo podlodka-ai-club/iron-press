@@ -21,9 +21,6 @@ export class GraphologyEngine<TState> implements Engine<TState> {
     options: Partial<EngineOptions> = {},
   ): Promise<ExecutionResult<TState>> {
     const opts = EngineOptionsSchema.parse(options);
-    const runId = opts.runId ?? randomUUID();
-    const startedAt = new Date().toISOString();
-
     if (!workflow.graph.hasNode(workflow.initialNodeId)) {
       throw new WorkflowError(
         "MISSING_INITIAL_NODE",
@@ -31,12 +28,42 @@ export class GraphologyEngine<TState> implements Engine<TState> {
         { nodeId: workflow.initialNodeId },
       );
     }
+    return this._execute(workflow, workflow.initialNodeId, initialState, hooks, opts);
+  }
+
+  async resume(
+    workflow: Workflow<TState>,
+    startNodeId: string,
+    initialState: TState,
+    hooks: EngineHooks<TState> = {},
+    options: Partial<EngineOptions> = {},
+  ): Promise<ExecutionResult<TState>> {
+    const opts = EngineOptionsSchema.parse(options);
+    if (!workflow.graph.hasNode(startNodeId)) {
+      throw new WorkflowError(
+        "MISSING_INITIAL_NODE",
+        `Start node "${startNodeId}" not found in graph`,
+        { nodeId: startNodeId },
+      );
+    }
+    return this._execute(workflow, startNodeId, initialState, hooks, opts);
+  }
+
+  private async _execute(
+    workflow: Workflow<TState>,
+    startNodeId: string,
+    initialState: TState,
+    hooks: EngineHooks<TState>,
+    opts: EngineOptions,
+  ): Promise<ExecutionResult<TState>> {
+    const runId = opts.runId ?? randomUUID();
+    const startedAt = new Date().toISOString();
 
     const visitCounts: Record<string, number> = {};
     const history: HistoryEntry[] = [];
     const state = initialState; // mutable — handlers write to this directly
 
-    let currentNodeId = workflow.initialNodeId;
+    let currentNodeId = startNodeId;
 
     const execCtx: ExecutionContext = {
       runId,
@@ -45,7 +72,7 @@ export class GraphologyEngine<TState> implements Engine<TState> {
       startedAt,
     };
 
-    logger.info({ runId, initialNodeId: workflow.initialNodeId }, "workflow run started");
+    logger.info({ runId, initialNodeId: startNodeId }, "workflow run started");
 
     // -------------------------------------------------------------------------
     // Main execution loop

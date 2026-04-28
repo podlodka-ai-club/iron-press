@@ -2,6 +2,7 @@ import { execSync } from "node:child_process";
 import { WorkflowBuilder, type Workflow } from "@/sdk/workflow";
 import type { RunLog } from "@/runs/run-log";
 import { PullRequestNode } from "@/sdk/node/pull-request-node";
+import { CreateBranchNode } from "@/sdk/node/create-branch-node";
 import { GithubClient } from "@/github/github-client";
 import { config } from "@/config";
 import { logger } from "@/util/logger";
@@ -60,6 +61,18 @@ export function simpleWorkflow(
       ),
     )
     .addNode(
+      new CreateBranchNode<SimpleWorkflowState>(
+        {
+          resolve: (state) =>
+            `${wfConfig.branchPrefix}${state.issueId.toLowerCase()}`,
+          store: (state, branchName) => {
+            state.branch = branchName;
+          },
+        },
+        wfConfig.cwd,
+      ),
+    )
+    .addNode(
       AgentNode.fromMd<SimpleWorkflowState>(
         new URL("implementation.md", import.meta.url),
         runLog,
@@ -82,7 +95,8 @@ export function simpleWorkflow(
         githubClient,
       ),
     )
-    .addEdge("ba", "eng", "Pass")
+    .addEdge("ba", "create-branch", "Pass")
+    .addEdge("create-branch", "eng", "Pass")
     .addEdge("eng", "pull-request", "Pass")
     .setInitialNode("ba")
     .build();
