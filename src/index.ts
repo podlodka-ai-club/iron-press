@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import path from "node:path";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import {
@@ -38,9 +39,10 @@ async function main(): Promise<void> {
     .option("--cwd <path>", "working directory the SDK session runs in", process.cwd())
     .option("--run-id <id>", "reuse an existing .runs/<id> directory (resumes stage counter)")
     .option("--poll", "poll for new issues and run workflows in a loop")
+    .option("--resume <nodeId>", "resume a suspended run from the given node (requires --run-id)")
     .parse(process.argv);
 
-  const opts = program.opts<{ cwd: string; runId?: string; poll?: boolean }>();
+  const opts = program.opts<{ cwd: string; runId?: string; poll?: boolean; resume?: string }>();
 
   // Handle polling mode
   if (opts.poll) {
@@ -74,6 +76,12 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  if (opts.resume && !opts.runId) {
+    // eslint-disable-next-line no-console
+    console.error("--resume requires --run-id");
+    process.exit(1);
+  }
+
   assertConfig();
 
   const runLog = createRunLog({
@@ -90,14 +98,34 @@ async function main(): Promise<void> {
 
   const workflow = factory(runLog, opts.cwd);
   const engine = new GraphologyEngine<WorkflowState>();
+  const workflowStatePath = path.join(runLog.runDir, "workflow-state.json");
+
+  // Restore persisted state when resuming; otherwise start fresh.
+  let initialState: WorkflowState;
+  if (opts.resume) {
+    if (!existsSync(workflowStatePath)) {
+      // eslint-disable-next-line no-console
+      console.error(`No saved workflow state at ${workflowStatePath}. Run the workflow first.`);
+      process.exit(1);
+    }
+    try {
+      initialState = JSON.parse(readFileSync(workflowStatePath, "utf8")) as WorkflowState;
+    } catch {
+      // eslint-disable-next-line no-console
+      console.error(`Failed to parse workflow state from ${workflowStatePath}`);
+      process.exit(1);
+    }
+  } else {
+    initialState = { issueId, runId: runLog.runId };
+  }
 
   try {
-    const result = await engine.run(
-      workflow,
-      { issueId, runId: runLog.runId },
-      {},
-      { runId: runLog.runId },
-    );
+    const result = opts.resume
+      ? await engine.resume(workflow, opts.resume, initialState, {}, { runId: runLog.runId })
+      : await engine.run(workflow, initialState, {}, { runId: runLog.runId });
+
+    // Persist final state so a subsequent --resume can restore workflow-specific fields.
+    writeFileSync(workflowStatePath, JSON.stringify(result.finalState, null, 2));
 
     runLog.appendEvent("run_finished", {
       workflow: workflowName,
