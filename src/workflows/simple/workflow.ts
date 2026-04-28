@@ -49,43 +49,41 @@ export function simpleWorkflow(
     cwd,
   };
   const { owner, repo } = parseGitRemote(wfConfig.cwd);
-  //const githubClient = new GithubClient(config.githubToken, logger);
+  const githubClient = new GithubClient(config.githubToken, logger);
 
-  return (
-    new WorkflowBuilder<SimpleWorkflowState>()
-      .addNode(
-        AgentNode.fromMd<SimpleWorkflowState>(
-          new URL("clarification.md", import.meta.url),
-          runLog,
-          wfConfig.cwd,
-        ),
-      )
-      .addNode(
-        AgentNode.fromMd<SimpleWorkflowState>(
-          new URL("implementation.md", import.meta.url),
-          runLog,
-          wfConfig.cwd,
-        ),
-      )
-      // .addNode(
-      //   new PullRequestNode<SimpleWorkflowState>(
-      //     {
-      //       resolve: (state) => ({
-      //         owner,
-      //         repo,
-      //         head:
-      //           state.branch ??
-      //           `${wfConfig.branchPrefix}${state.issueId.toLowerCase()}`,
-      //         base: wfConfig.baseBranch,
-      //         title: `[${state.issueId}] automated PR`,
-      //       }),
-      //     },
-      //     githubClient,
-      //   ),
-      // )
-      .addEdge("ba", "eng", "Pass")
-      //.addEdge("eng", "pull-request", "Pass")
-      .setInitialNode("ba")
-      .build()
-  );
+  return new WorkflowBuilder<SimpleWorkflowState>()
+    .addNode(
+      AgentNode.fromMd<SimpleWorkflowState>(
+        new URL("clarification.md", import.meta.url),
+        runLog,
+        wfConfig.cwd,
+      ),
+    )
+    .addNode(
+      AgentNode.fromMd<SimpleWorkflowState>(
+        new URL("implementation.md", import.meta.url),
+        runLog,
+        wfConfig.cwd,
+      ),
+    )
+    .addNode(
+      new PullRequestNode<SimpleWorkflowState>(
+        {
+          resolve: (state) => ({
+            owner,
+            repo,
+            head:
+              state.branch ??
+              `${wfConfig.branchPrefix}${state.issueId.toLowerCase()}`,
+            base: wfConfig.baseBranch,
+            title: `[${state.issueId}] automated PR`,
+          }),
+        },
+        githubClient,
+      ),
+    )
+    .addEdge("ba", "eng", "Pass")
+    .addEdge("eng", "pull-request", "Pass")
+    .setInitialNode("ba")
+    .build();
 }
