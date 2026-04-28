@@ -111,6 +111,10 @@ export class LinearClient {
     const branchName = raw.branchName ?? this.parseBranchFromDescription(description);
     const baseBranch = this.parseBaseBranchFromDescription(description);
 
+    // Extract priority: Linear SDK returns priority as number (0, 1, 2, 3, 4)
+    // 0=No priority, 1=Urgent, 2=High, 3=Normal, 4=Low
+    const priority = raw.priority ?? 0;
+
     return {
       id: raw.identifier,
       uuid: raw.id,
@@ -126,6 +130,7 @@ export class LinearClient {
       createdAt: raw.createdAt.toISOString(),
       updatedAt: raw.updatedAt.toISOString(),
       labels: labels.nodes.map((l) => l.name),
+      priority,
     };
   }
 
@@ -174,6 +179,19 @@ export class LinearClient {
         url: project.url,
         issues,
       };
+    });
+  }
+
+  // ===========================================================================
+  // Teams and polling
+  // ===========================================================================
+
+  async fetchTeamIssues(teamIdOrKey: string): Promise<LinearIssue[]> {
+    return withRetry(`linear.fetchTeamIssues(${teamIdOrKey})`, async () => {
+      this.logger.debug({ teamIdOrKey }, "linear.fetchTeamIssues");
+      const team = await this.sdk.team(teamIdOrKey);
+      const issuesConn = await team.issues({ first: 100, includeArchived: false });
+      return Promise.all(issuesConn.nodes.map((i) => this.hydrateIssue(i)));
     });
   }
 }

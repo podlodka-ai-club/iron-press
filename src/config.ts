@@ -47,6 +47,13 @@ export const config = {
 
   maxRunUsd: Number(process.env.MAX_RUN_USD ?? "50"),
 
+  // Polling configuration
+  pollingTeamId: process.env.POLL_TEAM_ID ?? "",
+  pollingProjectId: process.env.POLL_PROJECT_ID ?? "",
+  pollingIntervalMs: Number(process.env.POLL_INTERVAL_MS ?? "30000"),
+  pollingIncludeStatuses: (process.env.POLL_INCLUDE_STATUSES ?? "Backlog").split(",").map(s => s.trim()),
+  pollingExcludeStatuses: (process.env.POLL_EXCLUDE_STATUSES ?? "Done,Canceled").split(",").map(s => s.trim()),
+
   // Keyword list — if any appears in a BA question, never auto-dispatch PO even in --lead=po.
   sensitiveKeywords: [
     "pricing",

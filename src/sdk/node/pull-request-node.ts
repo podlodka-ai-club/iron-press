@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import type { GithubClient } from "@/github/github-client";
 import type { GitHubPullRequest } from "@/github/github-contracts";
 import type { Node, NodeContext, NodeStatus } from "@/sdk/workflow";
@@ -21,6 +22,9 @@ export interface PullRequestNodeConfig<TState> {
   resolve: (state: TState) => PullRequestParams;
   /** Optional: write the created PR back into state for downstream nodes. */
   store?: (state: TState, pr: GitHubPullRequest) => void;
+  /** Working directory for git operations. When provided, the branch is pushed
+   *  to origin before creating the PR if it has no remote tracking ref yet. */
+  cwd?: string;
 }
 
 /**
@@ -53,6 +57,7 @@ export class PullRequestNode<TState> implements Node<TState> {
   private readonly _resolve: (state: TState) => PullRequestParams;
   private readonly _store?: (state: TState, pr: GitHubPullRequest) => void;
   private readonly _client: GithubClient;
+  private readonly _cwd?: string;
 
   constructor(config: PullRequestNodeConfig<TState>, client: GithubClient) {
     this.id = config.id ?? "pull-request";
@@ -60,11 +65,28 @@ export class PullRequestNode<TState> implements Node<TState> {
     this._resolve = config.resolve;
     this._store = config.store;
     this._client = client;
+    this._cwd = config.cwd;
   }
 
   async execute(ctx: NodeContext<TState>): Promise<{ status: NodeStatus }> {
     const params = this._resolve(ctx.state);
     try {
+      if (this._cwd) {
+        const alreadyPushed = (() => {
+          try {
+            execSync(`git rev-parse --verify refs/remotes/origin/${params.head}`, {
+              cwd: this._cwd,
+              stdio: "pipe",
+            });
+            return true;
+          } catch {
+            return false;
+          }
+        })();
+        if (!alreadyPushed) {
+          execSync(`git push origin ${params.head}`, { cwd: this._cwd, stdio: "pipe" });
+        }
+      }
       const pr = await this._client.createPullRequest(params.owner, params.repo, {
         title: params.title,
         head: params.head,

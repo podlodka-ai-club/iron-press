@@ -44,6 +44,7 @@ export const LinearIssueSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   labels: z.array(z.string()).default([]),
+  priority: z.number().default(0), // 0=None, 1=Urgent, 2=High, 3=Normal, 4=Low
 });
 export type LinearIssue = z.infer<typeof LinearIssueSchema>;
 

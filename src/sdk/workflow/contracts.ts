@@ -176,6 +176,13 @@ export interface Engine<TState> {
     hooks?: EngineHooks<TState>,
     options?: Partial<EngineOptions>,
   ): Promise<ExecutionResult<TState>>;
+  resume(
+    workflow: Workflow<TState>,
+    startNodeId: string,
+    initialState: TState,
+    hooks?: EngineHooks<TState>,
+    options?: Partial<EngineOptions>,
+  ): Promise<ExecutionResult<TState>>;
 }
 
 // ---------------------------------------------------------------------------

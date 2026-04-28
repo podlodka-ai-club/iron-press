@@ -12,8 +12,10 @@ import {
   type WorkflowState,
 } from "@/sdk/workflow";
 import { createRunLog } from "@/runs/run-log";
-import { assertConfig } from "@/config";
+import { assertConfig, config } from "@/config";
 import { logger } from "@/util/logger";
+import { LinearClient } from "@/linear/linear-client";
+import { pollForNewIssues } from "@/polling/poller";
 
 async function main(): Promise<void> {
   // Discover workflow.json-based workflows and merge them in. Static workflows
@@ -27,7 +29,7 @@ async function main(): Promise<void> {
   const available = availableWorkflowNames().join(" | ");
   const program = new Command()
     .name("do")
-    .description("Run a named workflow against a Linear issue.")
+    .description("Run a named workflow against a Linear issue, or poll for new issues.")
     .argument(
       "[workflowName]",
       `workflow to run (${available}); defaults to "${DEFAULT_WORKFLOW}" when only an issue id is given`,
@@ -35,7 +37,17 @@ async function main(): Promise<void> {
     .argument("[issueId]", "Linear issue identifier, e.g. ENG-123")
     .option("--cwd <path>", "working directory the SDK session runs in", process.cwd())
     .option("--run-id <id>", "reuse an existing .runs/<id> directory (resumes stage counter)")
+    .option("--poll", "poll for new issues and run workflows in a loop")
     .parse(process.argv);
+
+  const opts = program.opts<{ cwd: string; runId?: string; poll?: boolean }>();
+
+  // Handle polling mode
+  if (opts.poll) {
+    assertConfig();
+    await runPollingMode(opts.cwd);
+    return;
+  }
 
   // Two-arg form: `do <workflow> <issue>`.
   // One-arg form: `do <issue>` — falls back to DEFAULT_WORKFLOW.
@@ -61,8 +73,6 @@ async function main(): Promise<void> {
     console.error((err as Error).message);
     process.exit(1);
   }
-
-  const opts = program.opts<{ cwd: string; runId?: string }>();
 
   assertConfig();
 
@@ -123,6 +133,91 @@ async function main(): Promise<void> {
     process.exitCode = 1;
   } finally {
     runLog.close();
+  }
+}
+
+async function runPollingMode(cwd: string): Promise<void> {
+  const linearClient = new LinearClient(config.linearApiKey, logger);
+
+  logger.info(
+    {
+      pollingIntervalMs: config.pollingIntervalMs,
+      pollingTeamId: config.pollingTeamId,
+      pollingProjectId: config.pollingProjectId,
+    },
+    "starting polling mode",
+  );
+
+  // Run polling loop indefinitely
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    try {
+      const pollResult = await pollForNewIssues(linearClient);
+
+      // Run workflow for each new issue
+      for (const issue of pollResult.newIssues) {
+        logger.info({ issueId: issue.id, issueTitle: issue.title }, "processing polled issue");
+
+        try {
+          const runLog = createRunLog({
+            rootInput: issue.id,
+            flags: { workflow: DEFAULT_WORKFLOW, cwd, polling: true },
+            resume: false,
+          });
+
+          logger.info(
+            { runId: runLog.runId, workflow: DEFAULT_WORKFLOW, issueId: issue.id },
+            "workflow starting for polled issue",
+          );
+
+          const factory = getWorkflow(DEFAULT_WORKFLOW);
+          const workflow = factory(runLog, cwd);
+          const engine = new GraphologyEngine<WorkflowState>();
+
+          const result = await engine.run(
+            workflow,
+            { issueId: issue.id, runId: runLog.runId },
+            {},
+            { runId: runLog.runId },
+          );
+
+          runLog.appendEvent("run_finished", {
+            workflow: DEFAULT_WORKFLOW,
+            finalStatus: result.finalStatus,
+            exitReason: result.exitReason,
+            history: result.history,
+          });
+
+          logger.info(
+            {
+              runId: runLog.runId,
+              workflow: DEFAULT_WORKFLOW,
+              issueId: issue.id,
+              finalStatus: result.finalStatus,
+            },
+            "workflow finished for polled issue",
+          );
+
+          runLog.close();
+        } catch (err) {
+          logger.error(
+            { err, issueId: issue.id },
+            "failed to process polled issue",
+          );
+        }
+      }
+
+      // Wait before next poll
+      logger.info(
+        { nextPollMs: config.pollingIntervalMs },
+        "waiting for next poll",
+      );
+      await new Promise((resolve) => setTimeout(resolve, config.pollingIntervalMs));
+    } catch (err) {
+      logger.error({ err }, "polling error, retrying in next cycle");
+      // Wait before retrying
+      await new Promise((resolve) => setTimeout(resolve, config.pollingIntervalMs));
+    }
   }
 }
 
