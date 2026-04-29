@@ -1,17 +1,12 @@
 import type { NodeContext, NodePassCheck } from "@/sdk/workflow";
-import { AGENT_IMPL_SUFFIX_RE } from "@/state/classify";
-import {
-  assertActionable,
-  getLinear,
-  resolveAgentImpl,
-} from "../_shared/pass-check-utils.js";
+import { getLinear, assertActionable, resolveAgentImpl, isAgentImpl } from "../../storage/linear/index.js";
 
 /**
  * TL pass-check.
  *
- * TL's output is one or more child RepoIssues under the AgentImpl, each with
- * a non-empty Technical Implementation description. Skip when the AgentImpl
- * already has at least one such child.
+ * TL's output is one or more RepoIssues under the AgentImpl, each with
+ * a non-empty Technical Implementation description.
+ * Skip when at least one such issue already exists.
  */
 export async function passCheck(
   ctx: NodeContext<{ issueId: string; runId: string }>,
@@ -24,13 +19,7 @@ export async function passCheck(
   if (guard.status !== null) return guard;
 
   const children = await linear.fetchChildrenByParentId(agentImpl.id);
-  const repoIssue = children.find(
-    (c) =>
-      !AGENT_IMPL_SUFFIX_RE.test(c.title) && c.description.trim().length > 0,
-  );
-  if (!repoIssue) {
-    return { status: null };
-  }
+  const hasRepoIssue = children.some((c) => !isAgentImpl(c) && c.description.trim().length > 0);
 
-  return { status: "Pass" };
+  return hasRepoIssue ? { status: "Pass" } : { status: null };
 }

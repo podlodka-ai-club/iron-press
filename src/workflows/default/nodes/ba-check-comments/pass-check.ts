@@ -1,35 +1,25 @@
 import type { NodeContext, NodePassCheck } from "@/sdk/workflow";
-import {
-  assertActionable,
-  findUnresolvedQuestionThread,
-  getLinear,
-  resolveAgentImpl,
-} from "../_shared/pass-check-utils.js";
+import { getLinear, assertActionable, resolveAgentImpl, findLatestQuestionThread } from "../../storage/linear/index.js";
 
 /**
  * BA-check-comments pass-check.
  *
- * Skip rule: every question on the AgentImpl has been resolved — either by
- * Linear's native resolve button or by a follow-up `Resolved` comment. If
- * any question is still unresolved, the node runs and decides what to do
- * (process answers, ask follow-ups, post `Resolved`, etc.).
+ * Skip when every question on the AgentImpl is resolved.
+ * Run when an unresolved thread exists — the agent will process answers
+ * or post follow-ups.
  */
 export async function passCheck(
   ctx: NodeContext<{ issueId: string; runId: string }>,
 ): Promise<NodePassCheck> {
   const linear = getLinear();
   const agentImpl = await resolveAgentImpl(linear, ctx.state.issueId);
-  if (!agentImpl) {
-    return { status: "Pass" };
-  }
+  if (!agentImpl) return { status: "Pass" };
 
   const guard = assertActionable(agentImpl);
   if (guard.status !== null) return guard;
 
-  const thread = findUnresolvedQuestionThread(agentImpl.comments);
-  if (!thread) {
-    return { status: "Pass" };
-  }
+  const thread = findLatestQuestionThread(agentImpl.comments);
+  if (!thread) return { status: "Pass" };
 
   return { status: null };
 }
