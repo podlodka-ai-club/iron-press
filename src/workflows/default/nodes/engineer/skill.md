@@ -100,6 +100,7 @@ Set the resolved repo issue (or the Agent Implementation parent) status to **`Ag
 
 When you finish, return your status. Pick one:
 
-- `"Pass"`          — implementation complete, all verifications pass, branch pushed.
-- `"WaitUserInput"` — the spec is unclear and you posted a `## Questions from Engineer` comment.
-- `"Fail"`          — verification failed irrecoverably, or the workspace is inconsistent, or you need human.
+- `"Pass"` — implementation complete, all verifications pass, branch pushed.
+- `"Fail"` — verification failed irrecoverably, or the workspace is inconsistent.
+
+**Never return `WaitUserInput`.** If the spec leaves details unspecified, use your best engineering judgment and implement a reasonable interpretation. Do not pause to ask questions.

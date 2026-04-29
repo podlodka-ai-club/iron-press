@@ -157,7 +157,13 @@ export class AgentNode<
   }
 
   protected _buildPrompt(ctx: NodeContext<TState>): string {
-    return this._config.prompt.replaceAll("{{issueId}}", ctx.state.issueId);
+    let prompt = this._config.prompt;
+    for (const [key, value] of Object.entries(ctx.state as Record<string, unknown>)) {
+      if (typeof value === "string") {
+        prompt = prompt.replaceAll(`{{${key}}}`, value);
+      }
+    }
+    return prompt;
   }
 
   private _writeResult(
