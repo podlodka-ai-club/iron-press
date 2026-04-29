@@ -53,20 +53,48 @@ export interface QuestionThread {
   askedBy: "BA" | "TL" | "PO" | "Unknown";
 }
 
+const RESOLVED_MARKER_RE = /^Resolved$/;
+
+/**
+ * A question thread counts as resolved when either:
+ * - the user clicked Linear's "Resolve thread" button (the question comment's
+ *   `isResolved` field is true), or
+ * - someone posted a follow-up comment whose body is just "Resolved" /
+ *   "Resolved." after the question (a common manual convention since the
+ *   Linear UI's resolve button isn't always discoverable).
+ */
+function isThreadResolved(question: Comment, allComments: Comment[]): boolean {
+  if (question.isResolved) return true;
+  return allComments.some(
+    (c) =>
+      c.id !== question.id &&
+      c.createdAt > question.createdAt &&
+      RESOLVED_MARKER_RE.test(c.body.trim()),
+  );
+}
+
+/**
+ * Matches the heading line of a question comment. The official convention is
+ * `## Questions from <Role>` (see `_shared/questions-format.md`), but agents
+ * sometimes deviate to `## Question:` or `## Clarifying Question`. We accept
+ * any of those — the issue this comment lives on already tells us who asked.
+ */
+const QUESTION_HEADING_RE = /^##\s*(Questions?|Clarifying\s+Question)/i;
+
 export function findLatestQuestionThread(comments: Comment[]): QuestionThread | null {
-  // Sort ascending by createdAt, take the last `## Questions from …` comment
+  // Sort ascending by createdAt, take the last unresolved question comment.
   const sorted = [...comments].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   for (let i = sorted.length - 1; i >= 0; i--) {
     const c = sorted[i];
     if (!c) continue;
     const body = c.body.trim();
-    if (/^##\s*Questions from/i.test(body)) {
-      let askedBy: "BA" | "TL" | "PO" | "Unknown" = "Unknown";
-      if (/Questions from BA/i.test(body)) askedBy = "BA";
-      else if (/Questions from (Tech Lead|TL)/i.test(body)) askedBy = "TL";
-      else if (/Questions from PO/i.test(body)) askedBy = "PO";
-      return { comment: c, askedBy };
-    }
+    if (!QUESTION_HEADING_RE.test(body)) continue;
+    if (isThreadResolved(c, comments)) continue;
+    let askedBy: "BA" | "TL" | "PO" | "Unknown" = "Unknown";
+    if (/Questions from BA/i.test(body)) askedBy = "BA";
+    else if (/Questions from (Tech Lead|TL|Engineer)/i.test(body)) askedBy = "TL";
+    else if (/Questions from PO/i.test(body)) askedBy = "PO";
+    return { comment: c, askedBy };
   }
   return null;
 }
@@ -82,9 +110,9 @@ export function hasHumanReplyAfter(thread: QuestionThread, comments: Comment[]):
     if (c.id === thread.comment.id) return false;
     if (c.createdAt <= afterTs) return false;
     const body = c.body.trim();
-    if (/^##\s*Questions from/i.test(body)) return false;
+    if (QUESTION_HEADING_RE.test(body)) return false;
     // Skip pure "Resolved" markers
-    if (/^resolved\.?$/i.test(body)) return false;
+    if (RESOLVED_MARKER_RE.test(body)) return false;
     // PO/BA agent replies are human-authored in Linear but marked as agent via authorType when we fetch.
     if (c.authorType === "agent") return false;
     return true;
