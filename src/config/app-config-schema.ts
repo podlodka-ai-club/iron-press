@@ -6,6 +6,7 @@ export const AppConfigSchema = z.object({
       teamId: z.string().optional(),
       projectId: z.string().optional(),
       pollIntervalMs: z.number().optional(),
+      pollLookbackMs: z.number().optional(),
       includeStatuses: z.array(z.string()).optional(),
       excludeStatuses: z.array(z.string()).optional(),
     })

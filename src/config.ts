@@ -72,6 +72,9 @@ export const config = {
   pollingIncludeStatuses:
     appConfig?.linear?.includeStatuses ??
     (process.env.POLL_INCLUDE_STATUSES ?? "Backlog").split(",").map((s) => s.trim()),
+  pollingLookbackMs:
+    appConfig?.linear?.pollLookbackMs ??
+    (process.env.POLL_LOOKBACK_MS ? Number(process.env.POLL_LOOKBACK_MS) : undefined),
   pollingExcludeStatuses:
     appConfig?.linear?.excludeStatuses ??
     (process.env.POLL_EXCLUDE_STATUSES ?? "Done,Canceled").split(",").map((s) => s.trim()),
