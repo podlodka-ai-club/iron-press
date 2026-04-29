@@ -26,7 +26,7 @@ export const WORKFLOWS: Record<string, WorkflowFactory> = {
 };
 
 /** Workflow used when the CLI is invoked without an explicit name. */
-export const DEFAULT_WORKFLOW = "default";
+export const DEFAULT_WORKFLOW = "simple";
 
 export function availableWorkflowNames(): string[] {
   return Object.keys(WORKFLOWS);
