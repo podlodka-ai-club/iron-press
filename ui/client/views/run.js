@@ -90,6 +90,9 @@ function draw(root) {
       </div>
       <div class="run-header-right">
         ${statusPill(run.status)}
+        <a href="/studio/run/${encodeURIComponent(run.runId)}" target="_blank" rel="noreferrer">
+          <button class="ghost" title="Open live workflow graph visualization">⬡ View Graph</button>
+        </a>
         <a href="/" data-nav><button class="ghost">← all runs</button></a>
       </div>
     </div>
