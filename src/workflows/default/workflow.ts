@@ -24,7 +24,7 @@ export interface DefaultWorkflowState {
  * The end-to-end agent pipeline. Takes a Linear issue and drives it from
  * intake to a GitHub PR.
  *
- *   decider → ba → ba-check-comments → tl → worktree → engineer → pull-request
+ *   decider → ba → ba-check-comments → tl → tl-check-comments → worktree → engineer → pull-request
  *
  * Single-repo project — no backend/frontend split. The worktree, engineer,
  * and pull-request nodes all operate against the workflow's `cwd`.
