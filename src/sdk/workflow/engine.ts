@@ -9,6 +9,8 @@ import type {
   HistoryEntry,
   Node,
   NodeContext,
+  NodeStatus,
+  NodePassCheck,
   Workflow,
 } from "./contracts.js";
 import { EngineOptionsSchema, WorkflowError } from "./contracts.js";
@@ -114,23 +116,42 @@ export class GraphologyEngine<TState> implements Engine<TState> {
         await hooks.onNodeEnter(currentNodeId, { ...execCtx }, state);
       }
 
-      logger.debug(
-        { runId, nodeId: currentNodeId, nodeName: node.name, visitIndex: visits },
-        "executing node",
-      );
+      // Pass-check — short-circuit if the node's output is already present.
+      // `status: null` means the node should run normally.
+      const passCheck: NodePassCheck = node.passCheck
+        ? await node.passCheck(nodeCtx)
+        : { status: null };
 
-      // Execute
-      const { status } = await node.execute(nodeCtx);
+      let status: NodeStatus;
 
-      const exitedAt = new Date().toISOString();
+      if (passCheck.status !== null) {
+        status = passCheck.status;
+        const exitedAt = new Date().toISOString();
+        history.push({ nodeId: currentNodeId, nodeName: node.name, status, enteredAt, exitedAt, visitIndex: visits });
+        logger.info(
+          { runId, nodeId: currentNodeId, nodeName: node.name, status },
+          `pass-check node "${currentNodeId}" → ${status}`,
+        );
+      } else {
+        logger.debug(
+          { runId, nodeId: currentNodeId, nodeName: node.name, visitIndex: visits },
+          "executing node",
+        );
 
-      history.push({ nodeId: currentNodeId, nodeName: node.name, status, enteredAt, exitedAt, visitIndex: visits });
+        // Execute
+        const result = await node.execute(nodeCtx);
+        status = result.status;
 
-      logger.debug({ runId, nodeId: currentNodeId, status }, "node completed");
+        const exitedAt = new Date().toISOString();
 
-      // Node-level onExit
-      if (node.onExit) {
-        await node.onExit(nodeCtx, status);
+        history.push({ nodeId: currentNodeId, nodeName: node.name, status, enteredAt, exitedAt, visitIndex: visits });
+
+        logger.debug({ runId, nodeId: currentNodeId, status }, "node completed");
+
+        // Node-level onExit
+        if (node.onExit) {
+          await node.onExit(nodeCtx, status);
+        }
       }
 
       // Engine-level onNodeExit

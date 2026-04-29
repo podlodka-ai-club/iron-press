@@ -3,6 +3,7 @@ export type {
   NodeStatus,
   NodeContext,
   Node,
+  NodePassCheck,
   WorkflowEdge,
   NodeAttributes,
   EdgeAttributes,

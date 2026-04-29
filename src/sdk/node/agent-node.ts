@@ -6,6 +6,7 @@ import {
   NodeStatusSchema,
   type Node,
   type NodeContext,
+  type NodePassCheck,
   type NodeStatus,
 } from "@/sdk/workflow";
 import { stableSessionId, runSession } from "@/sdk/session";
@@ -33,6 +34,8 @@ export interface AgentNodeConfig {
   disallowedTools: string[];
   /** Runtime tool-use guard — owned by the node folder. */
   canUseTool: CanUseTool;
+  /** Optional pre-execute idempotency check — owned by the node folder. */
+  passCheck?: (ctx: NodeContext<{ issueId: string; runId: string }>) => Promise<NodePassCheck>;
 }
 
 const SESSION_OUTPUT_SCHEMA: Record<string, unknown> = {
@@ -51,6 +54,7 @@ export class AgentNode<
 > implements Node<TState> {
   readonly id: string;
   readonly name: string;
+  readonly passCheck?: (ctx: NodeContext<TState>) => Promise<NodePassCheck>;
 
   private readonly _config: AgentNodeConfig;
   private readonly _runLog: RunLog;
@@ -60,6 +64,9 @@ export class AgentNode<
   constructor(config: AgentNodeConfig, runLog: RunLog, cwd: string) {
     this.id = config.id;
     this.name = config.name;
+    this.passCheck = config.passCheck as
+      | ((ctx: NodeContext<TState>) => Promise<NodePassCheck>)
+      | undefined;
     this._config = config;
     this._runLog = runLog;
     this._cwd = cwd;
