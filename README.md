@@ -199,3 +199,7 @@ pnpm test:watch         # vitest watch
 pnpm ui                 # monitoring UI
 pnpm ui:typecheck       # type-check the UI project
 ```
+
+---
+
+**iron-press** transforms agent orchestration from mystery into clarity—giving developers deterministic workflows, explicit decisions, and total control for every AI pipeline. *The future of orchestration is in your hands—make it deterministic.* Ready to join the community building transparent, predictable agentic systems? [Star us on GitHub](https://github.com/anthropics/iron-press) and help shape the future of AI orchestration.
