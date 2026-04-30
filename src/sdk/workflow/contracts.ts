@@ -26,6 +26,14 @@ export interface NodeContext<TState> {
 // Node — the primary contract for workflow steps
 // ---------------------------------------------------------------------------
 
+export interface NodePassCheck {
+  /**
+   * Status the engine should treat as if `execute` had returned it.
+   * `null` means the node should run normally.
+   */
+  status: NodeStatus | null;
+}
+
 export interface Node<TState> {
   /** Unique graph key used as the Graphology node id. */
   id: string;
@@ -33,6 +41,14 @@ export interface Node<TState> {
   name: string;
   /** Called before execute(). Side-effects only; no status return. */
   onEnter?: (ctx: NodeContext<TState>) => Promise<void>;
+  /**
+   * Optional pre-execute idempotency check. Called after `onEnter` and before
+   * `execute`. Return `{ status: null }` to run `execute` normally; return a
+   * non-null status to short-circuit — the engine treats it as if `execute`
+   * had returned that status (same edge matching), without opening a stage
+   * directory.
+   */
+  passCheck?: (ctx: NodeContext<TState>) => Promise<NodePassCheck>;
   /** Core logic. Mutates ctx.state in place; returns the output status. */
   execute: (ctx: NodeContext<TState>) => Promise<{ status: NodeStatus }>;
   /** Called after execute(), receives the status that was produced. */

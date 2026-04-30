@@ -2,6 +2,7 @@ import { type Dirent, existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 import type { RunLog } from "@/runs/run-log";
 import { simpleWorkflow } from "@/workflows/simple/workflow";
+import { defaultWorkflow } from "@/workflows/default/workflow";
 import type { Workflow } from "./contracts.js";
 import { loadWorkflowFromJson } from "./dynamic-loader.js";
 
@@ -20,6 +21,7 @@ export type WorkflowFactory<TState = WorkflowState> = (
 ) => Workflow<TState>;
 
 export const WORKFLOWS: Record<string, WorkflowFactory> = {
+  default: defaultWorkflow,
   simple: simpleWorkflow,
 };
 
