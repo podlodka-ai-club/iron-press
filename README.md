@@ -1,14 +1,38 @@
 # iron-press
 
-A deterministic TypeScript driver for Claude Agent SDK pipelines. Control flow is a **directed graph of nodes** (Graphology), not an LLM dispatcher — the same workflow produces the same traversal every time.
+An orchestrator that drives [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk) pipelines as configurable directed graphs. Picks up issues from Linear, runs them through a workflow of AI-agent nodes, and opens pull requests — fully automated.
 
-Each node runs one headless `@anthropic-ai/claude-agent-sdk` session with per-node prompts (`skill.md`) and permissions (`permissions.ts`). SDK structured output locks every node's return to one of three statuses — `Pass`, `Fail`, `WaitUserInput` — which the engine maps onto outgoing edges.
+Control flow is a **directed graph of nodes** (Graphology), not an LLM dispatcher — the same workflow produces the same traversal every time. SDK structured output locks every node's return to `Pass`, `Fail`, or `WaitUserInput`, which the engine maps onto outgoing edges.
+
+## Architecture
+
+```mermaid
+graph LR
+    Linear[Linear Issue] --> Poll[Poller]
+    Poll --> Selector[Label → Workflow Mapping]
+    Selector -->|label found| Mapped[Mapped Workflow]
+    Selector -->|no match| Default[Default Workflow]
+    Mapped --> Engine[Workflow Engine]
+    Default --> Engine
+    Engine --> PR[Pull Request]
+```
+
+Workflows are directed graphs. The default `simple` workflow:
+
+```mermaid
+graph LR
+    Issue --> Clarification[BA Clarification]
+    Clarification --> Branch[Create Branch]
+    Branch --> Implementation[Engineer]
+    Implementation --> PR[Pull Request]
+```
 
 ## Install
 
 ```bash
 pnpm install
 cp .env.example .env
+cp iron-press.config.json.example iron-press.config.json
 # fill in LINEAR_API_KEY (required unless DEV_MODE=1)
 ```
 
@@ -19,13 +43,46 @@ cp .env.example .env
 ## Run
 
 ```bash
-pnpm do <issueId>                        # default workflow (simple) on a Linear issue
+pnpm do <issueId>                        # default workflow on a Linear issue
 pnpm do <workflowName> <issueId>         # specific workflow
 pnpm do ENG-534 --cwd /path/to/repo      # set the SDK session cwd
 pnpm do ENG-534 --run-id 20260423-xyz    # reuse an existing .runs/<id> directory
+pnpm do --poll                           # poll Linear continuously for new issues
 ```
 
-Available workflows are registered in `src/sdk/workflow/registry.ts`. Today: `simple` (BA → Eng).
+## Configuration
+
+`iron-press.config.json` controls polling and workflow selection:
+
+```json
+{
+  "defaultWorkflow": "simple",
+  "workflowMapping": {
+    "feature": "simple",
+    "bug": "sm"
+  },
+  "linear": {
+    "teamId": "YOUR_TEAM_ID",
+    "pollIntervalMs": 30000,
+    "includeStatuses": ["Backlog"],
+    "excludeStatuses": ["Done", "Canceled"]
+  },
+  "repository": {
+    "url": "git@github.com:owner/repo.git",
+    "baseBranch": "main",
+    "branchPrefix": "issue-"
+  }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `defaultWorkflow` | Workflow used when no label matches (overrides the built-in `"simple"` default). |
+| `workflowMapping` | Maps Linear label names → workflow names. First matching label wins; unknown workflows log a warning and fall through to `defaultWorkflow`. |
+| `linear` | Polling settings: team/project, interval, status filters. |
+| `repository` | Auto-clone target for poll mode. |
+
+Available workflows are listed in `src/sdk/workflow/registry.ts`. Built-in: `simple` (BA → Eng), `sm` (BA → human review → Eng).
 
 ## Exit codes
 
@@ -46,8 +103,8 @@ src/
 │   ├── node/                 AgentNode base class + tool-call hooks
 │   └── session/              SDK query() wrapper + stable UUIDv5 session ids
 ├── workflows/
-│   └── simple/               BA → Eng workflow (factory + per-node folders)
-│       └── nodes/<node>/     index.ts + skill.md + permissions.ts
+│   ├── simple/               BA clarification → branch → eng → PR
+│   └── sm/                   BA → human review → worktree → eng → PR
 ├── github/                   Octokit client for issue/PR reads
 ├── runs/run-log.ts           .runs/<runId>/ artifact manager
 ├── types/contracts.ts        Zod schemas
@@ -184,9 +241,7 @@ Run id format: `YYYYMMDD-HHmmss-<rand>` (local time), so `ls` sorts chronologica
 pnpm test
 ```
 
-Passing today: `tests/state/classify.test.ts` (note: tests legacy source; see `tests/state/LEGACY.md`), `tests/ui/*`.
-
-Failing today: `tests/planner/` and `tests/workflow/` — both import source files that were deleted in the workflow-engine rewrite. See each folder's `LEGACY.md`.
+All suites pass: workflow engine, agent nodes, create-branch node, pull-request node, UI helpers.
 
 ## Scripts
 

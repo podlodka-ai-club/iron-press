@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 export const AppConfigSchema = z.object({
+  defaultWorkflow: z.string().optional(),
+  workflowMapping: z.record(z.string(), z.string()).optional(),
   linear: z
     .object({
       teamId: z.string().optional(),

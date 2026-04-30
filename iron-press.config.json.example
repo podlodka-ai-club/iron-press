@@ -1,4 +1,9 @@
 {
+  "defaultWorkflow": "simple",
+  "workflowMapping": {
+    "feature": "simple",
+    "bug": "sm"
+  },
   "linear": {
     "teamId": "YOUR_TEAM_ID",
     "projectId": "YOUR_PROJECT_ID",

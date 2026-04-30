@@ -135,6 +135,28 @@ Reads `.env` from the orchestrator root (same dir as `package.json`). Key vars:
 
 `config.workspaceRoot` defaults to `../..` relative to the orchestrator root (assumes the package sits at `.claude/orchestrator/`).
 
+JSON config (`iron-press.config.json`) is validated against `AppConfigSchema` (`src/config/app-config-schema.ts`). Top-level fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `defaultWorkflow` | `string` | Workflow used when no label matches; overrides the `DEFAULT_WORKFLOW` constant (`"simple"`). |
+| `workflowMapping` | `Record<string, string>` | Maps Linear label names to workflow names. In poll mode the first matching label wins; if the mapped workflow is not registered a warning is logged and the next label is tried. Falls back to `defaultWorkflow` (or the constant) when no label matches. |
+| `linear` | object | Polling settings: `teamId`, `projectId`, `pollIntervalMs`, `pollLookbackMs`, `includeStatuses`, `excludeStatuses`. |
+| `repository` | object | Auto-clone settings: `url`, `cloneDir`, `baseBranch` (default `"main"`), `branchPrefix` (default `"issue-"`). |
+
+Example:
+```json
+{
+  "defaultWorkflow": "simple",
+  "workflowMapping": {
+    "feature": "simple",
+    "bug": "sm"
+  },
+  "linear": { "teamId": "YOUR_TEAM_ID" },
+  "repository": { "url": "git@github.com:owner/repo.git" }
+}
+```
+
 ### Run artifacts (`src/runs/run-log.ts`)
 
 Every run writes to `.runs/<runId>/`:

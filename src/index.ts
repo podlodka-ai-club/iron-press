@@ -16,6 +16,7 @@ import { createRunLog } from "@/runs/run-log";
 import { assertConfig, config } from "@/config";
 import { logger } from "@/util/logger";
 import { LinearClient } from "@/linear/linear-client";
+import type { LinearIssue } from "@/linear/linear-contracts";
 import { pollForNewIssues } from "@/polling/poller";
 import { prepareRepository } from "@/git/repo-manager";
 
@@ -176,6 +177,25 @@ async function main(): Promise<void> {
   }
 }
 
+function resolveWorkflowForIssue(issue: LinearIssue): string {
+  const fallback = config.appConfig?.defaultWorkflow ?? DEFAULT_WORKFLOW;
+  const mapping = config.appConfig?.workflowMapping;
+  if (mapping) {
+    for (const label of issue.labels) {
+      const name = mapping[label];
+      if (name) {
+        try {
+          getWorkflow(name);
+          return name;
+        } catch {
+          logger.warn({ label, workflow: name }, "mapped workflow not found, skipping label");
+        }
+      }
+    }
+  }
+  return fallback;
+}
+
 async function runPollingMode(cwdOverride?: string): Promise<void> {
   const linearClient = new LinearClient(config.linearApiKey, logger);
 
@@ -199,6 +219,8 @@ async function runPollingMode(cwdOverride?: string): Promise<void> {
         logger.info({ issueId: issue.id, issueTitle: issue.title }, "processing polled issue");
 
         try {
+          const workflowName = resolveWorkflowForIssue(issue);
+
           let cwd: string;
           if (cwdOverride) {
             cwd = cwdOverride;
@@ -216,16 +238,16 @@ async function runPollingMode(cwdOverride?: string): Promise<void> {
 
           const runLog = createRunLog({
             rootInput: issue.id,
-            flags: { workflow: DEFAULT_WORKFLOW, cwd, polling: true },
+            flags: { workflow: workflowName, cwd, polling: true },
             resume: false,
           });
 
           logger.info(
-            { runId: runLog.runId, workflow: DEFAULT_WORKFLOW, issueId: issue.id, cwd },
+            { runId: runLog.runId, workflow: workflowName, issueId: issue.id, cwd },
             "workflow starting for polled issue",
           );
 
-          const factory = getWorkflow(DEFAULT_WORKFLOW);
+          const factory = getWorkflow(workflowName);
           const workflow = factory(runLog, cwd, {
             baseBranch: config.appConfig?.repository?.baseBranch,
             branchPrefix: config.appConfig?.repository?.branchPrefix,
@@ -249,7 +271,7 @@ async function runPollingMode(cwdOverride?: string): Promise<void> {
           );
 
           runLog.appendEvent("run_finished", {
-            workflow: DEFAULT_WORKFLOW,
+            workflow: workflowName,
             finalStatus: result.finalStatus,
             exitReason: result.exitReason,
             history: result.history,
@@ -258,7 +280,7 @@ async function runPollingMode(cwdOverride?: string): Promise<void> {
           logger.info(
             {
               runId: runLog.runId,
-              workflow: DEFAULT_WORKFLOW,
+              workflow: workflowName,
               issueId: issue.id,
               finalStatus: result.finalStatus,
             },
