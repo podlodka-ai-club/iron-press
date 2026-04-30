@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import type { RunLog } from "@/runs/run-log";
 import type { Node, NodeContext, NodeStatus } from "@/sdk/workflow";
@@ -49,13 +49,13 @@ export class CreateBranchNode<TState extends { issueId: string }> implements Nod
     const startedAt = new Date().toISOString();
     let status: NodeStatus;
     try {
-      const current = execSync("git rev-parse --abbrev-ref HEAD", {
+      const current = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
         cwd: this._cwd,
         stdio: "pipe",
         encoding: "utf8",
       }).trim();
       if (current !== branchName) {
-        execSync(`git checkout -b ${branchName}`, { cwd: this._cwd, stdio: "pipe" });
+        execFileSync("git", ["checkout", "-b", branchName], { cwd: this._cwd, stdio: "pipe" });
       }
       this._store?.(ctx.state, branchName);
       status = "Pass";

@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -19,12 +19,12 @@ export function prepareRepository(opts: RepoPrepareOptions): string {
   const baseBranch = opts.baseBranch ?? "main";
 
   if (existsSync(path.join(targetDir, ".git"))) {
-    execSync("git fetch origin", { cwd: targetDir, stdio: "pipe" });
-    execSync(`git checkout ${baseBranch}`, { cwd: targetDir, stdio: "pipe" });
-    execSync(`git pull origin ${baseBranch} --rebase`, { cwd: targetDir, stdio: "pipe" });
+    execFileSync("git", ["fetch", "origin"], { cwd: targetDir, stdio: "pipe" });
+    execFileSync("git", ["checkout", baseBranch], { cwd: targetDir, stdio: "pipe" });
+    execFileSync("git", ["pull", "origin", baseBranch, "--rebase"], { cwd: targetDir, stdio: "pipe" });
   } else {
     mkdirSync(path.dirname(targetDir), { recursive: true });
-    execSync(`git clone ${opts.url} ${targetDir}`, { stdio: "pipe" });
+    execFileSync("git", ["clone", opts.url, targetDir], { stdio: "pipe" });
   }
 
   return targetDir;

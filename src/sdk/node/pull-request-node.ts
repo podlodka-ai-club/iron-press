@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import type { GithubClient } from "@/github/github-client";
 import type { GitHubPullRequest } from "@/github/github-contracts";
@@ -80,7 +80,7 @@ export class PullRequestNode<TState extends { issueId: string }> implements Node
       if (this._cwd) {
         const alreadyPushed = (() => {
           try {
-            execSync(`git rev-parse --verify refs/remotes/origin/${params.head}`, {
+            execFileSync("git", ["rev-parse", "--verify", `refs/remotes/origin/${params.head}`], {
               cwd: this._cwd,
               stdio: "pipe",
             });
@@ -90,7 +90,7 @@ export class PullRequestNode<TState extends { issueId: string }> implements Node
           }
         })();
         if (!alreadyPushed) {
-          execSync(`git push origin ${params.head}`, { cwd: this._cwd, stdio: "pipe" });
+          execFileSync("git", ["push", "origin", params.head], { cwd: this._cwd, stdio: "pipe" });
         }
       }
       const pr = await this._client.createPullRequest(params.owner, params.repo, {

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import path from "node:path";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 
 vi.mock("node:child_process");
@@ -19,14 +19,14 @@ const CUSTOM_DIR = "/custom/clone/dir";
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Return the first argument passed to the nth execSync call (0-indexed). */
-function execArg(callIndex = 0): string {
-  return vi.mocked(execSync).mock.calls[callIndex]![0] as string;
+/** Return the argv array passed to the nth execFileSync call (0-indexed). */
+function execArgs(callIndex = 0): string[] {
+  return vi.mocked(execFileSync).mock.calls[callIndex]![1] as string[];
 }
 
-/** Return the options object passed to the nth execSync call (0-indexed). */
+/** Return the options object passed to the nth execFileSync call (0-indexed). */
 function execOpts(callIndex = 0): Record<string, unknown> {
-  return vi.mocked(execSync).mock.calls[callIndex]![1] as Record<string, unknown>;
+  return vi.mocked(execFileSync).mock.calls[callIndex]![2] as Record<string, unknown>;
 }
 
 // ---------------------------------------------------------------------------
@@ -37,7 +37,7 @@ describe("prepareRepository", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(mkdirSync).mockReturnValue(undefined as never);
-    vi.mocked(execSync).mockReturnValue(Buffer.from("") as never);
+    vi.mocked(execFileSync).mockReturnValue(Buffer.from("") as never);
   });
 
   // -------------------------------------------------------------------------
@@ -51,15 +51,15 @@ describe("prepareRepository", () => {
 
     it("does not call git clone", () => {
       prepareRepository({ url: SAMPLE_SSH_URL, cloneDir: CUSTOM_DIR });
-      const cloneCalled = vi.mocked(execSync).mock.calls.some(
-        ([cmd]) => typeof cmd === "string" && cmd.startsWith("git clone"),
+      const cloneCalled = vi.mocked(execFileSync).mock.calls.some(
+        ([_file, args]) => (args as string[])[0] === "clone",
       );
       expect(cloneCalled).toBe(false);
     });
 
     it("fetches from origin", () => {
       prepareRepository({ url: SAMPLE_SSH_URL, cloneDir: CUSTOM_DIR });
-      expect(execArg(0)).toBe("git fetch origin");
+      expect(execArgs(0)).toEqual(["fetch", "origin"]);
     });
 
     it("passes stdio:pipe on fetch", () => {
@@ -69,22 +69,22 @@ describe("prepareRepository", () => {
 
     it("checks out the default branch (main)", () => {
       prepareRepository({ url: SAMPLE_SSH_URL, cloneDir: CUSTOM_DIR });
-      expect(execArg(1)).toBe("git checkout main");
+      expect(execArgs(1)).toEqual(["checkout", "main"]);
     });
 
     it("checks out a custom baseBranch", () => {
       prepareRepository({ url: SAMPLE_SSH_URL, cloneDir: CUSTOM_DIR, baseBranch: "develop" });
-      expect(execArg(1)).toBe("git checkout develop");
+      expect(execArgs(1)).toEqual(["checkout", "develop"]);
     });
 
     it("pulls with rebase on the default branch", () => {
       prepareRepository({ url: SAMPLE_SSH_URL, cloneDir: CUSTOM_DIR });
-      expect(execArg(2)).toBe("git pull origin main --rebase");
+      expect(execArgs(2)).toEqual(["pull", "origin", "main", "--rebase"]);
     });
 
     it("pulls with rebase using a custom baseBranch", () => {
       prepareRepository({ url: SAMPLE_SSH_URL, cloneDir: CUSTOM_DIR, baseBranch: "release" });
-      expect(execArg(2)).toBe("git pull origin release --rebase");
+      expect(execArgs(2)).toEqual(["pull", "origin", "release", "--rebase"]);
     });
 
     it("passes targetDir as cwd for all git commands", () => {
@@ -94,9 +94,9 @@ describe("prepareRepository", () => {
       expect(execOpts(2)).toMatchObject({ cwd: CUSTOM_DIR });
     });
 
-    it("issues exactly 3 execSync calls", () => {
+    it("issues exactly 3 execFileSync calls", () => {
       prepareRepository({ url: SAMPLE_SSH_URL, cloneDir: CUSTOM_DIR });
-      expect(execSync).toHaveBeenCalledTimes(3);
+      expect(execFileSync).toHaveBeenCalledTimes(3);
     });
   });
 
@@ -111,7 +111,7 @@ describe("prepareRepository", () => {
 
     it("calls git clone with the URL and target directory", () => {
       prepareRepository({ url: SAMPLE_SSH_URL, cloneDir: CUSTOM_DIR });
-      expect(execArg(0)).toBe(`git clone ${SAMPLE_SSH_URL} ${CUSTOM_DIR}`);
+      expect(execArgs(0)).toEqual(["clone", SAMPLE_SSH_URL, CUSTOM_DIR]);
     });
 
     it("passes stdio:pipe on clone", () => {
@@ -127,15 +127,15 @@ describe("prepareRepository", () => {
       );
     });
 
-    it("issues exactly 1 execSync call", () => {
+    it("issues exactly 1 execFileSync call", () => {
       prepareRepository({ url: SAMPLE_SSH_URL, cloneDir: CUSTOM_DIR });
-      expect(execSync).toHaveBeenCalledTimes(1);
+      expect(execFileSync).toHaveBeenCalledTimes(1);
     });
 
     it("does not call fetch, checkout, or pull", () => {
       prepareRepository({ url: SAMPLE_SSH_URL, cloneDir: CUSTOM_DIR });
-      const calls = vi.mocked(execSync).mock.calls.map(([cmd]) => cmd as string);
-      expect(calls.every((cmd) => cmd.startsWith("git clone"))).toBe(true);
+      const calls = vi.mocked(execFileSync).mock.calls.map(([_file, args]) => args as string[]);
+      expect(calls.every((args) => args[0] === "clone")).toBe(true);
     });
   });
 
@@ -150,17 +150,17 @@ describe("prepareRepository", () => {
 
     it("extracts the repo name from an SSH URL (strips .git suffix)", () => {
       prepareRepository({ url: SAMPLE_SSH_URL });
-      expect(execArg(0)).toContain("my-repo");
+      expect(execArgs(0)[2]).toContain("my-repo");
     });
 
     it("extracts the repo name from an HTTPS URL", () => {
       prepareRepository({ url: SAMPLE_HTTPS_URL });
-      expect(execArg(0)).toContain("my-repo");
+      expect(execArgs(0)[2]).toContain("my-repo");
     });
 
     it("extracts the repo name from a URL without .git suffix", () => {
       prepareRepository({ url: "https://github.com/owner/no-extension" });
-      expect(execArg(0)).toContain("no-extension");
+      expect(execArgs(0)[2]).toContain("no-extension");
     });
   });
 
