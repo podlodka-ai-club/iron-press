@@ -72,7 +72,7 @@ export function stop() {
 function rootTitle() {
   const state = run.state ?? {};
   const issues = state.issues ?? {};
-  const rootInput = run.meta?.rootInput;
+  const rootInput = run.rootInput ?? run.meta?.rootInput;
   return rootInput && issues[rootInput]?.title ? issues[rootInput].title : "";
 }
 

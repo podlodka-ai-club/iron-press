@@ -199,6 +199,7 @@ button.ghost {
   padding: 14px;
   background: var(--surface);
   border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
   border-radius: var(--radius);
   transition: border-color 0.12s, transform 0.12s;
   cursor: pointer;
@@ -208,6 +209,10 @@ button.ghost {
   border-color: var(--border-strong);
   transform: translateY(-1px);
 }
+.run-card[data-status="running"] { border-left-color: var(--blue); }
+.run-card[data-status="done"] { border-left-color: var(--green); }
+.run-card[data-status="blocked"] { border-left-color: var(--amber); }
+.run-card[data-status="error"] { border-left-color: var(--red); }
 
 .run-card-head {
   display: flex;

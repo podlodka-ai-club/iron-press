@@ -46,6 +46,29 @@ describe("deriveRunStatus", () => {
   it("exit_idle counts as done", () => {
     expect(deriveRunStatus({ startedAt: "t" }, ["run_started", "exit_idle"])).toBe("done");
   });
+
+  it("done when run_finished with finalStatus Pass", () => {
+    const events = [{ type: "run_started" }, { type: "run_finished", data: { finalStatus: "Pass" } }];
+    expect(deriveRunStatus(null, ["run_started", "run_finished"], events)).toBe("done");
+  });
+
+  it("error when run_finished with finalStatus Fail", () => {
+    const events = [{ type: "run_started" }, { type: "run_finished", data: { finalStatus: "Fail" } }];
+    expect(deriveRunStatus(null, ["run_started", "run_finished"], events)).toBe("error");
+  });
+
+  it("blocked when run_finished with finalStatus WaitUserInput", () => {
+    const events = [{ type: "run_started" }, { type: "run_finished", data: { finalStatus: "WaitUserInput" } }];
+    expect(deriveRunStatus(null, ["run_started", "run_finished"], events)).toBe("blocked");
+  });
+
+  it("error when run_errored", () => {
+    expect(deriveRunStatus(null, ["run_started", "run_errored"])).toBe("error");
+  });
+
+  it("running when only events (no meta) with run_started", () => {
+    expect(deriveRunStatus(null, ["run_started"])).toBe("running");
+  });
 });
 
 describe("deriveStageStatus", () => {
