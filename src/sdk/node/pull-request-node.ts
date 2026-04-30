@@ -1,6 +1,8 @@
 import { execSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
 import type { GithubClient } from "@/github/github-client";
 import type { GitHubPullRequest } from "@/github/github-contracts";
+import type { RunLog } from "@/runs/run-log";
 import type { Node, NodeContext, NodeStatus } from "@/sdk/workflow";
 
 export interface PullRequestParams {
@@ -50,7 +52,7 @@ export interface PullRequestNodeConfig<TState> {
  *     new GithubClient(config.githubToken, logger),
  *   )
  */
-export class PullRequestNode<TState> implements Node<TState> {
+export class PullRequestNode<TState extends { issueId: string }> implements Node<TState> {
   readonly id: string;
   readonly name: string;
 
@@ -58,18 +60,22 @@ export class PullRequestNode<TState> implements Node<TState> {
   private readonly _store?: (state: TState, pr: GitHubPullRequest) => void;
   private readonly _client: GithubClient;
   private readonly _cwd?: string;
+  private readonly _runLog?: RunLog;
 
-  constructor(config: PullRequestNodeConfig<TState>, client: GithubClient) {
+  constructor(config: PullRequestNodeConfig<TState>, client: GithubClient, runLog?: RunLog) {
     this.id = config.id ?? "pull-request";
     this.name = config.name ?? "Create Pull Request";
     this._resolve = config.resolve;
     this._store = config.store;
     this._client = client;
     this._cwd = config.cwd;
+    this._runLog = runLog;
   }
 
   async execute(ctx: NodeContext<TState>): Promise<{ status: NodeStatus }> {
     const params = this._resolve(ctx.state);
+    const startedAt = new Date().toISOString();
+    let status: NodeStatus;
     try {
       if (this._cwd) {
         const alreadyPushed = (() => {
@@ -95,10 +101,18 @@ export class PullRequestNode<TState> implements Node<TState> {
         draft: params.draft,
       });
       this._store?.(ctx.state, pr);
-      return { status: "Pass" };
+      status = "Pass";
     } catch (err) {
       console.error("[PullRequestNode] createPullRequest failed:", err);
-      return { status: "Fail" };
+      status = "Fail";
     }
+    this._writeStage(ctx, status, startedAt);
+    return { status };
+  }
+
+  private _writeStage(ctx: NodeContext<TState>, status: NodeStatus, startedAt: string): void {
+    if (!this._runLog) return;
+    const dir = this._runLog.openStage({ kind: "pull-request", issueId: ctx.state.issueId });
+    writeFileSync(dir.resultPath, JSON.stringify({ status, startedAt, finishedAt: new Date().toISOString() }));
   }
 }

@@ -75,15 +75,20 @@ describe("deriveStageStatus", () => {
   it("running when no result", () => {
     expect(deriveStageStatus(null)).toBe("running");
   });
-  it("done/blocked from result.status", () => {
+  it("done/blocked from legacy result.status", () => {
     expect(deriveStageStatus({ status: "done" })).toBe("done");
     expect(deriveStageStatus({ status: "blocked" })).toBe("blocked");
+  });
+  it("done/blocked/error from NodeStatus values", () => {
+    expect(deriveStageStatus({ status: "Pass" })).toBe("done");
+    expect(deriveStageStatus({ status: "WaitUserInput" })).toBe("blocked");
+    expect(deriveStageStatus({ status: "Fail" })).toBe("error");
   });
   it("result.status 'failed' renders as error", () => {
     expect(deriveStageStatus({ status: "failed" })).toBe("error");
   });
   it("unknown for unrecognised status", () => {
-    expect(deriveStageStatus({ status: "weird" as unknown as "done" })).toBe("unknown");
+    expect(deriveStageStatus({ status: "weird" })).toBe("unknown");
   });
 });
 

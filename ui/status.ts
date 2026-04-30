@@ -58,12 +58,13 @@ export function deriveRunStatus(
 }
 
 export function deriveStageStatus(
-  result: { status?: "done" | "blocked" | "failed" } | null,
+  result: { status?: string } | null,
 ): StageStatus {
   if (!result) return "running";
-  if (result.status === "done") return "done";
-  if (result.status === "blocked") return "blocked";
-  if (result.status === "failed") return "error";
+  const s = result.status;
+  if (s === "done" || s === "Pass") return "done";
+  if (s === "blocked" || s === "WaitUserInput") return "blocked";
+  if (s === "failed" || s === "Fail") return "error";
   return "unknown";
 }
 

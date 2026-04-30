@@ -17,17 +17,20 @@ export function App() {
 
   // Run visualization mode — render RunViewer full-screen
   if (route.runId) {
+    const isEmbedded = new URLSearchParams(window.location.search).get("embed") === "1";
     return (
       <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#0d1117" }}>
-        <div style={{ height: 40, borderBottom: "1px solid #21262d", display: "flex", alignItems: "center", padding: "0 16px", gap: 12, flexShrink: 0, background: "#161b22" }}>
-          <a href="/" style={{ fontSize: 12, color: "#6e7681", textDecoration: "none" }}>← Monitor</a>
-          <span style={{ color: "#30363d" }}>|</span>
-          <span style={{ fontSize: 13, fontWeight: 600, color: "#e6edf3" }}>iron-press Studio</span>
-          <span style={{ color: "#30363d" }}>|</span>
-          <span style={{ fontSize: 12, color: "#8b949e" }}>Run Visualization</span>
-        </div>
+        {!isEmbedded && (
+          <div style={{ height: 40, borderBottom: "1px solid #21262d", display: "flex", alignItems: "center", padding: "0 16px", gap: 12, flexShrink: 0, background: "#161b22" }}>
+            <a href="/" style={{ fontSize: 12, color: "#6e7681", textDecoration: "none" }}>← Monitor</a>
+            <span style={{ color: "#30363d" }}>|</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#e6edf3" }}>iron-press Studio</span>
+            <span style={{ color: "#30363d" }}>|</span>
+            <span style={{ fontSize: 12, color: "#8b949e" }}>Run Visualization</span>
+          </div>
+        )}
         <div style={{ flex: 1, overflow: "hidden" }}>
-          <RunViewer runId={route.runId} />
+          <RunViewer runId={route.runId} embed={isEmbedded} />
         </div>
       </div>
     );

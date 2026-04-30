@@ -70,6 +70,7 @@ export function simpleWorkflow(
           },
         },
         wfConfig.cwd,
+        runLog,
       ),
     )
     .addNode(
@@ -94,6 +95,7 @@ export function simpleWorkflow(
           }),
         },
         githubClient,
+        runLog,
       ),
     )
     .addEdge("ba", "create-branch", "Pass")

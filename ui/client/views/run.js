@@ -90,9 +90,6 @@ function draw(root) {
       </div>
       <div class="run-header-right">
         ${statusPill(run.status)}
-        <a href="/studio/run/${encodeURIComponent(run.runId)}" target="_blank" rel="noreferrer">
-          <button class="ghost" title="Open live workflow graph visualization">⬡ View Graph</button>
-        </a>
         <a href="/" data-nav><button class="ghost">← all runs</button></a>
       </div>
     </div>
@@ -103,6 +100,17 @@ function draw(root) {
           <div class="panel-head">Stages <span style="color:var(--muted); font-weight:400;">(${run.stages.length})</span></div>
           <div class="panel-body">
             <div class="stage-list" id="stage-list">${stagesHtml()}</div>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-bottom: 14px;">
+          <div class="panel-head">Workflow Graph</div>
+          <div class="panel-body" style="padding: 0;">
+            <iframe
+              src="/studio/run/${encodeURIComponent(run.runId)}?embed=1"
+              class="run-graph-iframe"
+              title="Live workflow graph"
+            ></iframe>
           </div>
         </div>
 

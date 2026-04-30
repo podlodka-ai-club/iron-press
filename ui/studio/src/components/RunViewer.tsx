@@ -4,6 +4,9 @@ import {
   Background,
   Controls,
   MiniMap,
+  Handle,
+  Position,
+  MarkerType,
   type Node,
   type Edge,
   useNodesState,
@@ -168,8 +171,11 @@ function RunNode({ data }: { data: RunNodeData }) {
         transition: "all 0.3s ease",
         cursor: "default",
         userSelect: "none",
+        position: "relative",
       }}
     >
+      <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
+      <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
       {/* Header */}
       <div
         style={{
@@ -320,11 +326,12 @@ function markTraversedEdges(
 
 interface Props {
   runId: string;
+  embed?: boolean;
 }
 
 type LoadState = "loading" | "ready" | "error";
 
-export function RunViewer({ runId }: Props) {
+export function RunViewer({ runId, embed = false }: Props) {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [runDetail, setRunDetail] = useState<RunDetail | null>(null);
@@ -358,11 +365,11 @@ export function RunViewer({ runId }: Props) {
         id: `${e.from}-${e.to}-${e.onStatus}`,
         source: e.from,
         target: e.to,
-        sourceHandle: e.onStatus,
         type: "default",
         animated: false,
         data: { onStatus: e.onStatus },
         style: { stroke: STATUS_COLORS[e.onStatus] ?? "#8b949e", strokeWidth: 2 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: STATUS_COLORS[e.onStatus] ?? "#8b949e" },
         label: e.onStatus,
         labelStyle: {
           fill: STATUS_COLORS[e.onStatus] ?? "#8b949e",
@@ -385,18 +392,22 @@ export function RunViewer({ runId }: Props) {
       const traversed = markTraversedEdges(currentEdges, currentEvents);
       setTraversedEdgeIds(traversed);
       setEdges((prev) =>
-        prev.map((e) => ({
-          ...e,
-          animated: traversed.has(e.id),
-          style: {
-            ...e.style,
-            stroke: traversed.has(e.id)
-              ? (STATUS_COLORS[((e.data as { onStatus?: string } | undefined)?.onStatus ?? "") as import("../types.js").NodeStatus] ?? "#8b949e")
-              : "#30363d",
-            strokeWidth: traversed.has(e.id) ? 2.5 : 1.5,
-            opacity: traversed.has(e.id) ? 1 : 0.4,
-          },
-        })),
+        prev.map((e) => {
+          const isTraversed = traversed.has(e.id);
+          const statusColor = STATUS_COLORS[((e.data as { onStatus?: string } | undefined)?.onStatus ?? "") as import("../types.js").NodeStatus] ?? "#8b949e";
+          const color = isTraversed ? statusColor : "#8b949e";
+          return {
+            ...e,
+            animated: isTraversed,
+            style: {
+              ...e.style,
+              stroke: color,
+              strokeWidth: isTraversed ? 2.5 : 1.5,
+              opacity: isTraversed ? 1 : 0.4,
+            },
+            markerEnd: { type: MarkerType.ArrowClosed, color },
+          };
+        }),
       );
     },
     [setEdges],
@@ -522,7 +533,7 @@ export function RunViewer({ runId }: Props) {
         }
       `}</style>
 
-      <RunHeader runId={runId} runDetail={runDetail} runStatus={runStatus} workflowName={workflowBundle.name} />
+      {!embed && <RunHeader runId={runId} runDetail={runDetail} runStatus={runStatus} workflowName={workflowBundle.name} />}
 
       <div style={{ flex: 1, position: "relative" }}>
         <ReactFlow
