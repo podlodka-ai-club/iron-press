@@ -368,9 +368,8 @@ export function RunViewer({ runId, embed = false }: Props) {
         type: "default",
         animated: false,
         data: { onStatus: e.onStatus },
-        style: { stroke: STATUS_COLORS[e.onStatus] ?? "#8b949e", strokeWidth: 2 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: STATUS_COLORS[e.onStatus] ?? "#8b949e" },
-        label: e.onStatus,
+        style: { stroke: "#8b949e", strokeWidth: 1.5, opacity: 0.4 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: "#8b949e" },
         labelStyle: {
           fill: STATUS_COLORS[e.onStatus] ?? "#8b949e",
           fontSize: 10,
@@ -399,6 +398,7 @@ export function RunViewer({ runId, embed = false }: Props) {
           return {
             ...e,
             animated: isTraversed,
+            label: isTraversed ? e.data?.onStatus as string : undefined,
             style: {
               ...e.style,
               stroke: color,
