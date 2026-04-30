@@ -24,28 +24,12 @@ export type WorkflowFactory<TState = WorkflowState> = (
   opts?: WorkflowRunOptions,
 ) => Workflow<TState>;
 
-// Lazy-load workflows to break circular dependencies. The workflow registry
-// is imported by agent-node.ts (via @/sdk/workflow), and workflows import
-// nodes that extend AgentNode. Without lazy loading, this creates a cycle.
-let _defaultWorkflow: WorkflowFactory | undefined;
-let _simpleWorkflow: WorkflowFactory | undefined;
-
-export const WORKFLOWS: Record<string, WorkflowFactory> = {
-  get default(): WorkflowFactory {
-    if (!_defaultWorkflow) {
-      const { defaultWorkflow } = require("@/workflows/default/workflow");
-      _defaultWorkflow = defaultWorkflow as WorkflowFactory;
-    }
-    return _defaultWorkflow as WorkflowFactory;
-  },
-  get simple(): WorkflowFactory {
-    if (!_simpleWorkflow) {
-      const { simpleWorkflow } = require("@/workflows/simple/workflow");
-      _simpleWorkflow = simpleWorkflow as WorkflowFactory;
-    }
-    return _simpleWorkflow as WorkflowFactory;
-  },
-};
+// Static workflows are registered here by the CLI entry point at startup via
+// dynamic import(). This avoids a circular-module issue: workflow files import
+// AgentNode, which imports values from @/sdk/workflow (this module). Deferring
+// the workflow imports to runtime (after all static imports have resolved)
+// breaks the cycle without needing CJS require().
+export const WORKFLOWS: Record<string, WorkflowFactory> = {};
 
 /** Workflow used when the CLI is invoked without an explicit name. */
 export const DEFAULT_WORKFLOW = "simple";

@@ -10,6 +10,7 @@ import {
   availableWorkflowNames,
   getWorkflow,
   discoverDynamicWorkflows,
+  type WorkflowFactory,
   type WorkflowState,
 } from "@/sdk/workflow";
 import { createRunLog } from "@/runs/run-log";
@@ -21,6 +22,17 @@ import { pollForNewIssues } from "@/polling/poller";
 import { prepareRepository } from "@/git/repo-manager";
 
 async function main(): Promise<void> {
+  // Register built-in TypeScript workflows. Done here via dynamic import() so
+  // that workflow files (which import AgentNode, which imports from this SDK
+  // module) are loaded after all static module-level imports have settled,
+  // avoiding a circular-module initialisation race.
+  const [defaultMod, simpleMod] = await Promise.all([
+    import("@/workflows/default/workflow"),
+    import("@/workflows/simple/workflow"),
+  ]);
+  WORKFLOWS["default"] = defaultMod.defaultWorkflow as WorkflowFactory;
+  WORKFLOWS["simple"] = simpleMod.simpleWorkflow as WorkflowFactory;
+
   // Discover workflow.json-based workflows and merge them in. Static workflows
   // registered in WORKFLOWS take precedence on name collision.
   const workflowsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "workflows");
