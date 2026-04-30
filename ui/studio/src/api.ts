@@ -1,4 +1,5 @@
 import type { AgentTypeInfo, WorkflowBundle } from "./types.js";
+import type { RunDetail } from "./run-types.js";
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
@@ -37,4 +38,31 @@ export async function updateWorkflow(bundle: WorkflowBundle): Promise<void> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(bundle),
   });
+}
+
+export async function fetchRun(runId: string): Promise<RunDetail> {
+  return fetchJson<RunDetail>(`/api/runs/${encodeURIComponent(runId)}`);
+}
+
+export type SseEventHandlers = Record<string, (data: unknown) => void>;
+
+export function openRunEventsSse(runId: string, handlers: SseEventHandlers): () => void {
+  const url = `/api/runs/${encodeURIComponent(runId)}/events`;
+  const source = new EventSource(url);
+
+  for (const [eventName, handler] of Object.entries(handlers)) {
+    source.addEventListener(eventName, (e: MessageEvent) => {
+      try {
+        handler(JSON.parse(e.data as string) as unknown);
+      } catch {
+        // ignore parse errors
+      }
+    });
+  }
+
+  source.addEventListener("error", () => {
+    // EventSource auto-reconnects; nothing to do here
+  });
+
+  return () => source.close();
 }

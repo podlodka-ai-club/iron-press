@@ -1,8 +1,6 @@
 import { type Dirent, existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 import type { RunLog } from "@/runs/run-log";
-import { simpleWorkflow } from "@/workflows/simple/workflow";
-import { defaultWorkflow } from "@/workflows/default/workflow";
 import type { Workflow } from "./contracts.js";
 import { loadWorkflowFromJson } from "./dynamic-loader.js";
 
@@ -20,9 +18,27 @@ export type WorkflowFactory<TState = WorkflowState> = (
   cwd: string,
 ) => Workflow<TState>;
 
+// Lazy-load workflows to break circular dependencies. The workflow registry
+// is imported by agent-node.ts (via @/sdk/workflow), and workflows import
+// nodes that extend AgentNode. Without lazy loading, this creates a cycle.
+let _defaultWorkflow: WorkflowFactory | undefined;
+let _simpleWorkflow: WorkflowFactory | undefined;
+
 export const WORKFLOWS: Record<string, WorkflowFactory> = {
-  default: defaultWorkflow,
-  simple: simpleWorkflow,
+  get default(): WorkflowFactory {
+    if (!_defaultWorkflow) {
+      const { defaultWorkflow } = require("@/workflows/default/workflow");
+      _defaultWorkflow = defaultWorkflow as WorkflowFactory;
+    }
+    return _defaultWorkflow as WorkflowFactory;
+  },
+  get simple(): WorkflowFactory {
+    if (!_simpleWorkflow) {
+      const { simpleWorkflow } = require("@/workflows/simple/workflow");
+      _simpleWorkflow = simpleWorkflow as WorkflowFactory;
+    }
+    return _simpleWorkflow as WorkflowFactory;
+  },
 };
 
 /** Workflow used when the CLI is invoked without an explicit name. */

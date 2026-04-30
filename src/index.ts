@@ -120,9 +120,18 @@ async function main(): Promise<void> {
   }
 
   try {
-    const result = opts.resume
-      ? await engine.resume(workflow, opts.resume, initialState, {}, { runId: runLog.runId })
-      : await engine.run(workflow, initialState, {}, { runId: runLog.runId });
+    const engineHooks = {
+    onNodeEnter: (nodeId: string) => {
+      runLog.appendEvent("node_entered", { nodeId });
+    },
+    onNodeExit: (nodeId: string, status: string) => {
+      runLog.appendEvent("node_exited", { nodeId, status });
+    },
+  };
+
+  const result = opts.resume
+      ? await engine.resume(workflow, opts.resume, initialState, engineHooks, { runId: runLog.runId })
+      : await engine.run(workflow, initialState, engineHooks, { runId: runLog.runId });
 
     // Persist final state so a subsequent --resume can restore workflow-specific fields.
     writeFileSync(workflowStatePath, JSON.stringify(result.finalState, null, 2));
@@ -202,10 +211,19 @@ async function runPollingMode(cwd: string): Promise<void> {
           const workflow = factory(runLog, cwd);
           const engine = new GraphologyEngine<WorkflowState>();
 
+          const pollEngineHooks = {
+            onNodeEnter: (nodeId: string) => {
+              runLog.appendEvent("node_entered", { nodeId });
+            },
+            onNodeExit: (nodeId: string, status: string) => {
+              runLog.appendEvent("node_exited", { nodeId, status });
+            },
+          };
+
           const result = await engine.run(
             workflow,
             { issueId: issue.id, runId: runLog.runId },
-            {},
+            pollEngineHooks,
             { runId: runLog.runId },
           );
 

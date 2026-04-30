@@ -56,6 +56,7 @@ export interface EventRecord {
 export interface RunDetail {
   runId: string;
   runDir: string;
+  rootInput: string;
   meta: Record<string, unknown> | null;
   state: Record<string, unknown> | null;
   events: EventRecord[];
@@ -163,7 +164,8 @@ function summariseRun(runsDir: string, runId: string): RunSummary | null {
   }>(path.join(runDir, "meta.json"));
 
   const eventsFile = path.join(runDir, "events.ndjson");
-  const eventTypes = readEventTypes(eventsFile);
+  const events = readEvents(eventsFile);
+  const eventTypes = events.map((e) => e.type);
 
   // Enumerate stages on disk (trust fs over meta.stageCount)
   const stagesDir = path.join(runDir, "stages");
@@ -181,14 +183,17 @@ function summariseRun(runsDir: string, runId: string): RunSummary | null {
 
   // Lookup issue title → state.json keeps a snapshot of the walked Linear tree
   const titleLookup = readIssueTitleLookup(runDir);
-  const rootTitle = meta?.rootInput ? titleLookup[meta.rootInput] : undefined;
+  const resolvedRootInput = meta?.rootInput ?? extractRootInput(events);
+  const rootTitle = resolvedRootInput ? titleLookup[resolvedRootInput] : undefined;
 
-  const startedAt = meta?.startedAt;
-  const finishedAt = meta?.finishedAt;
+  const startEvent = events.find((e) => e.type === "run_started" || e.type === "run_resumed");
+  const endEvent = events.findLast((e) => e.type === "run_finished" || e.type === "run_errored");
+  const startedAt = meta?.startedAt ?? startEvent?.t;
+  const finishedAt = meta?.finishedAt ?? endEvent?.t;
   const durationMs =
     startedAt && finishedAt ? Date.parse(finishedAt) - Date.parse(startedAt) : undefined;
 
-  const status = deriveRunStatus(meta ?? null, eventTypes);
+  const status = deriveRunStatus(meta ?? null, eventTypes, events);
 
   // For running runs, find the most recent stage without a result.json → that's
   // the in-flight one. Scan from the end for speed.
@@ -211,7 +216,7 @@ function summariseRun(runsDir: string, runId: string): RunSummary | null {
 
   return {
     runId,
-    rootInput: meta?.rootInput ?? "(unknown)",
+    rootInput: meta?.rootInput ?? extractRootInput(events) ?? "(unknown)",
     rootTitle,
     status,
     startedAt,
@@ -243,16 +248,22 @@ function readIssueTitleLookup(runDir: string): Record<string, string> {
   return out;
 }
 
-function readEventTypes(eventsFile: string): string[] {
+interface ParsedEvent {
+  t?: string;
+  type: string;
+  data?: Record<string, unknown>;
+}
+
+function readEvents(eventsFile: string): ParsedEvent[] {
   if (!existsSync(eventsFile)) return [];
   try {
     const raw = readFileSync(eventsFile, "utf8");
     const lines = raw.split("\n").filter(Boolean);
-    const out: string[] = [];
+    const out: ParsedEvent[] = [];
     for (const line of lines) {
       try {
-        const parsed = JSON.parse(line) as { type?: string };
-        if (parsed.type) out.push(parsed.type);
+        const parsed = JSON.parse(line) as { t?: string; type?: string; data?: Record<string, unknown> };
+        if (parsed.type) out.push({ t: parsed.t, type: parsed.type, data: parsed.data });
       } catch {
         // skip
       }
@@ -261,6 +272,15 @@ function readEventTypes(eventsFile: string): string[] {
   } catch {
     return [];
   }
+}
+
+function extractRootInput(events: ParsedEvent[]): string | undefined {
+  const startEvent = events.find((e) => e.type === "run_started" || e.type === "run_resumed");
+  return startEvent?.data?.rootInput as string | undefined;
+}
+
+function readEventTypes(eventsFile: string): string[] {
+  return readEvents(eventsFile).map((e) => e.type);
 }
 
 export function readRun(runsDir: string, runId: string): RunDetail | null {
@@ -286,9 +306,13 @@ export function readRun(runsDir: string, runId: string): RunDetail | null {
       .filter((s): s is StageSummary => s !== null);
   }
 
+  const rootInput = (meta as { rootInput?: string } | null)?.rootInput
+    ?? (events.find((e) => e.type === "run_started" || e.type === "run_resumed")?.data as { rootInput?: string } | undefined)?.rootInput;
+
   return {
     runId,
     runDir,
+    rootInput: rootInput ?? "(unknown)",
     meta,
     state,
     events,
@@ -297,6 +321,7 @@ export function readRun(runsDir: string, runId: string): RunDetail | null {
     status: deriveRunStatus(
       (meta as { startedAt?: string; finishedAt?: string; exitCode?: number } | null) ?? null,
       eventTypes,
+      events as ParsedEvent[],
     ),
   };
 }
