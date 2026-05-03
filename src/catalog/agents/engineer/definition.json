@@ -1,0 +1,17 @@
+{
+  "role": "engineer",
+  "label": "Engineer",
+  "color": "#f0883e",
+  "defaultNodeId": "engineer",
+  "nodeType": "agent",
+  "builtin": true,
+  "defaultPassCheckRef": "linear.engineer",
+  "defaultConfig": {
+    "model": "claude-haiku-4-5",
+    "maxTurns": 200,
+    "budgetUsd": 15,
+    "allowedTools": ["Read", "Grep", "Glob", "WebFetch", "Edit", "Write", "Bash", "mcp__linear__*"],
+    "disallowedTools": [],
+    "permissionProfile": "safe-write"
+  }
+}

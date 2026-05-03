@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import type { AgentTypeInfo, WorkflowBundle } from "./types.js";
-import { fetchAgentTypes, fetchWorkflow, fetchWorkflows } from "./api.js";
+import type { WorkflowBundle } from "./types.js";
+import { fetchWorkflow, fetchWorkflows } from "./api.js";
 import { Canvas } from "./components/Canvas.js";
 import { NodeLibrary } from "./components/NodeLibrary.js";
 import { Inspector } from "./components/Inspector.js";
@@ -14,13 +14,11 @@ export function App() {
   const { route } = useRoute();
   const loadBundle = useWorkflowStore((s) => s.loadBundle);
 
-  const [agentTypes, setAgentTypes] = useState<AgentTypeInfo[]>([]);
   const [workflows, setWorkflows] = useState<WorkflowBundle[]>([]);
   const [validation, setValidation] = useState<ValidationResult>({ valid: true, errors: [] });
   const [toast, setToast] = useState<{ msg: string; error: boolean } | null>(null);
 
   useEffect(() => {
-    fetchAgentTypes().then(setAgentTypes).catch(console.error);
     fetchWorkflows().then(setWorkflows).catch(console.error);
   }, []);
 
@@ -74,11 +72,11 @@ export function App() {
 
       {/* Three-panel body */}
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-        <NodeLibrary agentTypes={agentTypes} workflows={workflows} />
+        <NodeLibrary workflows={workflows} />
 
         {/* Canvas area */}
         <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
-          <Canvas agentTypes={agentTypes} />
+          <Canvas />
           <Toolbar
             workflows={workflows}
             onValidation={setValidation}

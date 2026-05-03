@@ -1,0 +1,18 @@
+{
+  "role": "worktree-script",
+  "label": "Git: Worktree",
+  "color": "#8957e5",
+  "defaultNodeId": "worktree",
+  "nodeType": "script",
+  "scriptKind": "worktree",
+  "builtin": true,
+  "defaultPassCheckRef": "worktree",
+  "defaultConfig": {
+    "model": "script",
+    "maxTurns": 1,
+    "budgetUsd": 0.1,
+    "allowedTools": [],
+    "disallowedTools": [],
+    "permissionProfile": "safe-write"
+  }
+}

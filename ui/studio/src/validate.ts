@@ -63,7 +63,14 @@ export function validateWorkflow(
     errors.push({ message: "Workflow contains a cycle", blocking: true });
   }
 
-  // 6. Reachability (warn only)
+  // 6. Script nodes must have scriptKind
+  for (const node of nodes) {
+    if (node.data.nodeType === "script" && !node.data.scriptKind) {
+      errors.push({ message: `Script node "${node.id}" is missing scriptKind`, blocking: true });
+    }
+  }
+
+  // 7. Reachability (warn only)
   if (initialNodeId && nodeIds.has(initialNodeId)) {
     const reachable = getReachable(initialNodeId, edges);
     for (const id of nodeIds) {

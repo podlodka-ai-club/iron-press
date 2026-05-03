@@ -1,6 +1,7 @@
 import type { NodeStatus } from "./types.js";
 
 // ─── ROLE COLORS ────────────────────────────────────────────────────────────
+// FIXME[api-config]: hardcoded — fetch from GET /api/studio/config instead
 
 export const ROLE_COLORS: Record<string, string> = {
   "business-analyst": "#e3b341",
@@ -15,6 +16,7 @@ export const ROLE_COLORS: Record<string, string> = {
 export const ROLE_COLOR_FALLBACK = "#8b949e";
 
 // ─── STATUS COLORS ──────────────────────────────────────────────────────────
+// FIXME[api-config]: hardcoded — fetch from GET /api/studio/config instead
 
 export const STATUS_COLORS: Record<NodeStatus, string> = {
   Pass: "#3fb950",

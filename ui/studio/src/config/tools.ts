@@ -1,3 +1,4 @@
+// FIXME[api-config]: hardcoded — fetch from GET /api/studio/config instead
 export const COMMON_TOOLS = [
   "Read",
   "Grep",

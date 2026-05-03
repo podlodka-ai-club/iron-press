@@ -1,21 +1,41 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ReactFlow, Background, Controls, MiniMap } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { AgentNode } from "./AgentNode.js";
+import { ScriptNode } from "./ScriptNode.js";
 import { StatusEdge } from "./StatusEdge.js";
 import { useWorkflowStore } from "../store/workflowStore.js";
 import { useWorkflowShortcuts } from "../hooks/useWorkflowShortcuts.js";
 import { ROLE_COLORS, ROLE_COLOR_FALLBACK, DROP_OFFSET_X, DROP_OFFSET_Y } from "../constants.js";
 import type { AgentTypeInfo, BuilderNodeData } from "../types.js";
+import { fetchAgents } from "../api.js";
 
-const nodeTypes = { agentNode: AgentNode };
+const nodeTypes = { agentNode: AgentNode, scriptNode: ScriptNode };
 const edgeTypes = { statusEdge: StatusEdge };
 
-interface Props {
-  agentTypes: AgentTypeInfo[];
-}
+export function Canvas() {
+  const [agentTypes, setAgentTypes] = useState<AgentTypeInfo[]>([]);
 
-export function Canvas({ agentTypes }: Props) {
+  useEffect(() => {
+    fetchAgents()
+      .then((agents) =>
+        setAgentTypes(
+          agents.map((a) => ({
+            role: a.role,
+            label: a.label,
+            color: a.color,
+            defaultNodeId: a.defaultNodeId,
+            defaultSkill: a.defaultSkill,
+            defaultConfig: a.defaultConfig,
+            nodeType: a.nodeType,
+            scriptKind: a.scriptKind,
+            defaultPassCheckRef: a.defaultPassCheckRef,
+            builtin: a.builtin,
+          })),
+        ),
+      )
+      .catch(console.error);
+  }, []);
   const nodes = useWorkflowStore((s) => s.nodes);
   const edges = useWorkflowStore((s) => s.edges);
   const onNodesChange = useWorkflowStore((s) => s.onNodesChange);

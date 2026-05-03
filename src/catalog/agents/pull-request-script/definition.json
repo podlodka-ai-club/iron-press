@@ -1,0 +1,17 @@
+{
+  "role": "pull-request-script",
+  "label": "Git: Pull Request",
+  "color": "#3fb950",
+  "defaultNodeId": "pull-request",
+  "nodeType": "script",
+  "scriptKind": "pull-request",
+  "builtin": true,
+  "defaultConfig": {
+    "model": "script",
+    "maxTurns": 1,
+    "budgetUsd": 0.1,
+    "allowedTools": [],
+    "disallowedTools": [],
+    "permissionProfile": "safe-write"
+  }
+}

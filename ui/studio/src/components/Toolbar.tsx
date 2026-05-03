@@ -22,6 +22,8 @@ export function Toolbar({ workflows, onValidation, onMessage }: Props) {
   const clearCanvas = useWorkflowStore((s) => s.clearCanvas);
   const loadBundle = useWorkflowStore((s) => s.loadBundle);
   const saveWorkflow = useWorkflowStore((s) => s.saveWorkflow);
+  const isReadOnly = useWorkflowStore((s) => s.isReadOnly);
+  const cloneAsNew = useWorkflowStore((s) => s.cloneAsNew);
   const past = useWorkflowStore((s) => s.past);
   const future = useWorkflowStore((s) => s.future);
   const undo = useWorkflowStore((s) => s.undo);
@@ -48,6 +50,12 @@ export function Toolbar({ workflows, onValidation, onMessage }: Props) {
     }
   }
 
+  async function handleSaveAsNew() {
+    cloneAsNew();
+    // After cloneAsNew the name is cleared — prompt user to rename in the toolbar input
+    onMessage("Cloned as new workflow — set a name and save.");
+  }
+
   async function handleLoad(name: string) {
     setShowLoad(false);
     try {
@@ -59,7 +67,7 @@ export function Toolbar({ workflows, onValidation, onMessage }: Props) {
     }
   }
 
-  const saveDisabled = saving || !isDirty;
+  const saveDisabled = saving || !isDirty || isReadOnly;
 
   return (
     <Panel position="top-left">
@@ -121,6 +129,16 @@ export function Toolbar({ workflows, onValidation, onMessage }: Props) {
         >
           {saving ? "Saving…" : "Save"}
         </button>
+
+        {isReadOnly && (
+          <button
+            className="toolbar-btn toolbar-btn-primary"
+            onClick={() => void handleSaveAsNew()}
+            title="Clone this read-only workflow as a new editable copy"
+          >
+            Save as Copy
+          </button>
+        )}
 
         <div style={{ width: 1, height: 16, background: "#30363d" }} />
 

@@ -6,6 +6,7 @@
       "id": "ba",
       "name": "Business Analyst",
       "role": "business-analyst",
+      "nodeType": "agent",
       "model": "claude-haiku-4-5",
       "maxTurns": 60,
       "budgetUsd": 4,
@@ -14,18 +15,49 @@
       "permissionProfile": "view-only"
     },
     {
+      "id": "create-branch",
+      "name": "Create Branch",
+      "role": "create-branch-script",
+      "nodeType": "script",
+      "scriptKind": "create-branch",
+      "scriptConfig": { "branchPrefix": "issue-", "stateKey": "branch" },
+      "model": "script",
+      "maxTurns": 1,
+      "budgetUsd": 0.1,
+      "allowedTools": [],
+      "disallowedTools": [],
+      "permissionProfile": "safe-write"
+    },
+    {
       "id": "eng",
       "name": "Engineer",
       "role": "engineer",
+      "nodeType": "agent",
       "model": "claude-haiku-4-5",
       "maxTurns": 150,
       "budgetUsd": 12,
       "allowedTools": ["Read", "Grep", "Glob", "WebFetch", "Edit", "Write", "Bash", "mcp__linear__*"],
       "disallowedTools": [],
       "permissionProfile": "safe-write"
+    },
+    {
+      "id": "pull-request",
+      "name": "Create Pull Request",
+      "role": "pull-request-script",
+      "nodeType": "script",
+      "scriptKind": "pull-request",
+      "scriptConfig": { "baseBranch": "main", "branchStateKey": "branch" },
+      "model": "script",
+      "maxTurns": 1,
+      "budgetUsd": 0.1,
+      "allowedTools": [],
+      "disallowedTools": [],
+      "permissionProfile": "safe-write"
     }
   ],
   "edges": [
-    { "from": "ba", "to": "eng", "onStatus": "Pass" }
+    { "from": "ba",            "to": "create-branch", "onStatus": "Pass" },
+    { "from": "create-branch", "to": "eng",           "onStatus": "Pass" },
+    { "from": "eng",           "to": "pull-request",  "onStatus": "Pass" }
   ]
 }

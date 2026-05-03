@@ -44,6 +44,7 @@ interface WorkflowStore {
   workflowName: string;
   initialNodeId: string;
   isDirty: boolean;
+  isReadOnly: boolean;
 
   // Selection
   selectedNodeId: string | null;
@@ -59,6 +60,7 @@ interface WorkflowStore {
   clearCanvas: () => void;
   loadBundle: (bundle: WorkflowBundle) => void;
   saveWorkflow: (isNew: boolean) => Promise<void>;
+  cloneAsNew: () => void;
   deleteSelected: () => void;
 }
 
@@ -85,23 +87,32 @@ function bundleToFlow(
   const nodePosition = opts.nodePosition ?? (() => ({ x: 0, y: 0 }));
   const isInitial = opts.isInitial ?? ((id) => id === bundle.definition.initialNodeId);
 
-  const nodes: Node<BuilderNodeData>[] = bundle.definition.nodes.map((nd, i) => ({
-    id: resolveId(nd.id),
-    type: "agentNode",
-    position: nodePosition(i),
-    data: {
-      label: nd.name,
-      role: nd.role,
-      model: nd.model,
-      maxTurns: nd.maxTurns,
-      budgetUsd: nd.budgetUsd,
-      allowedTools: nd.allowedTools,
-      disallowedTools: nd.disallowedTools,
-      permissionProfile: nd.permissionProfile,
-      skillContent: bundle.skills[nd.id] ?? "",
-      isInitial: isInitial(nd.id),
-    },
-  }));
+  const nodes: Node<BuilderNodeData>[] = bundle.definition.nodes.map((nd, i) => {
+    const nodeType = nd.nodeType ?? "agent";
+    const isScript = nodeType === "script";
+    return {
+      id: resolveId(nd.id),
+      type: isScript ? "scriptNode" : "agentNode",
+      position: nodePosition(i),
+      data: {
+        label: nd.name,
+        role: nd.role,
+        model: nd.model,
+        maxTurns: nd.maxTurns,
+        budgetUsd: nd.budgetUsd,
+        allowedTools: nd.allowedTools,
+        disallowedTools: nd.disallowedTools,
+        permissionProfile: nd.permissionProfile,
+        skillContent: bundle.skills[nd.id] ?? "",
+        isInitial: isInitial(nd.id),
+        nodeType,
+        scriptKind: nd.scriptKind,
+        passCheckRef: nd.passCheckRef,
+        scriptConfig: nd.scriptConfig,
+        readonly: bundle.readonly,
+      },
+    };
+  });
 
   const edges: FlowEdge[] = bundle.definition.edges.map((e) => {
     const src = resolveId(e.from);
@@ -139,6 +150,10 @@ function nodesToDefinition(
       allowedTools: n.data.allowedTools,
       disallowedTools: n.data.disallowedTools,
       permissionProfile: n.data.permissionProfile,
+      nodeType: n.data.nodeType,
+      scriptKind: n.data.scriptKind as "worktree" | "create-branch" | "pull-request" | undefined,
+      passCheckRef: n.data.passCheckRef,
+      scriptConfig: n.data.scriptConfig,
     })),
     edges: edges.map((e) => ({
       from: e.source,
@@ -166,6 +181,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => {
     workflowName: "",
     initialNodeId: "",
     isDirty: false,
+    isReadOnly: false,
     selectedNodeId: null,
 
     // ── graph events (React Flow callbacks) ──────────────────────────────────
@@ -269,6 +285,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => {
       const id = uniqueId(agentType.defaultNodeId, existingIds);
       const isFirst = get().nodes.length === 0;
       const { model, maxTurns, budgetUsd, allowedTools, disallowedTools, permissionProfile } = agentType.defaultConfig;
+      const nodeType = agentType.nodeType ?? "agent";
       const data: BuilderNodeData = {
         label: agentType.label,
         role: agentType.role,
@@ -280,9 +297,13 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => {
         allowedTools,
         disallowedTools,
         permissionProfile,
+        nodeType,
+        scriptKind: agentType.scriptKind,
+        passCheckRef: agentType.defaultPassCheckRef,
       };
+      const flowType = nodeType === "script" ? "scriptNode" : "agentNode";
       mutate((s) => ({
-        nodes: [...s.nodes, { id, type: "agentNode", position, data }],
+        nodes: [...s.nodes, { id, type: flowType, position, data }],
         initialNodeId: isFirst ? id : s.initialNodeId,
       }));
     },
@@ -364,9 +385,19 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => {
         initialNodeId: bundle.definition.initialNodeId,
         selectedNodeId: null,
         isDirty: false,
+        isReadOnly: bundle.readonly ?? false,
         past: [],
         future: [],
       });
+    },
+
+    cloneAsNew: () => {
+      set((s) => ({
+        workflowName: "",
+        isReadOnly: false,
+        isDirty: true,
+        nodes: s.nodes.map((n) => ({ ...n, data: { ...n.data, readonly: false } })),
+      }));
     },
 
     saveWorkflow: async (isNew) => {

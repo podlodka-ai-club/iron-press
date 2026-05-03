@@ -75,6 +75,7 @@ interface NodeHeaderProps {
 
 function NodeHeader({ id, data, roleColor, selected }: NodeHeaderProps) {
   const headerBg = nodeHeaderBg(selected);
+  const passCheckLabel = data.passCheckRef ? data.passCheckRef.split(".")[0] : null;
   return (
     <div
       style={{
@@ -102,6 +103,27 @@ function NodeHeader({ id, data, roleColor, selected }: NodeHeaderProps) {
       >
         {data.label}
       </span>
+      {passCheckLabel && (
+        <span
+          title={`passCheck: ${data.passCheckRef}`}
+          style={{
+            fontSize: 9,
+            color: "#8b949e",
+            background: "#161b22",
+            border: "1px solid #30363d",
+            borderRadius: 10,
+            padding: "1px 5px",
+            flexShrink: 0,
+            maxWidth: 72,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            letterSpacing: "0.02em",
+          }}
+        >
+          {passCheckLabel}
+        </span>
+      )}
       {data.isInitial && (
         <span style={{ fontSize: 10, color: "#3fb950", fontWeight: 700, flexShrink: 0 }}>▶</span>
       )}
@@ -260,7 +282,7 @@ function AgentNodeComponent({ id, data, selected }: NodeProps<AgentNodeType>) {
 
   const roleColor = ROLE_COLORS[data.role] ?? ROLE_COLOR_FALLBACK;
   const isHuman = data.role === "human";
-  const isScript = data.role === "worktree-script";
+  const isScript = data.nodeType === "script";
 
   return (
     <div

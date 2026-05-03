@@ -14,6 +14,11 @@ export interface BuilderNodeData extends AgentConfig, Record<string, unknown> {
   role: string;
   skillContent: string;
   isInitial: boolean;
+  nodeType: "agent" | "script";
+  scriptKind?: string;
+  passCheckRef?: string;
+  scriptConfig?: Record<string, unknown>;
+  readonly?: boolean;
 }
 
 export interface AgentTypeInfo {
@@ -23,6 +28,10 @@ export interface AgentTypeInfo {
   defaultNodeId: string;
   defaultSkill: string;
   defaultConfig: AgentConfig;
+  nodeType?: "agent" | "script";
+  scriptKind?: string;
+  defaultPassCheckRef?: string;
+  builtin?: boolean;
 }
 
 export interface WorkflowDefinition {
@@ -38,6 +47,10 @@ export interface WorkflowDefinition {
     allowedTools: string[];
     disallowedTools: string[];
     permissionProfile: string;
+    nodeType?: "agent" | "script";
+    scriptKind?: "worktree" | "create-branch" | "pull-request";
+    passCheckRef?: string;
+    scriptConfig?: Record<string, unknown>;
   }>;
   edges: Array<{ from: string; to: string; onStatus: NodeStatus }>;
 }
@@ -46,6 +59,7 @@ export interface WorkflowBundle {
   name: string;
   definition: WorkflowDefinition;
   skills: Record<string, string>;
+  readonly?: boolean;
 }
 
 export interface WorkflowSummary {

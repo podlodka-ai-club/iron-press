@@ -4,40 +4,40 @@ import { z } from "zod";
 
 // =============================================================================
 // Schema — mirrors src/sdk/workflow/workflow-definition.ts (canonical source)
+// FIXME[schema-sync]: duplicated from src/sdk/workflow/workflow-definition.ts — extract to shared package
 // =============================================================================
 
 const NodeStatusSchema = z.enum(["Pass", "Fail", "WaitUserInput"]);
 
-const WorkflowNodeDefinitionSchema = z
-  .object({
-    id: z.string().min(1),
-    name: z.string().min(1),
-    role: z.string().min(1),
-    model: z.string().min(1),
-    maxTurns: z.number().int().positive(),
-    budgetUsd: z.number().positive(),
-    allowedTools: z.array(z.string()),
-    disallowedTools: z.array(z.string()),
-    permissionProfile: z.string().min(1),
-  })
-  .strict();
+const WorkflowNodeDefinitionSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  role: z.string().min(1),
+  model: z.string().min(1),
+  maxTurns: z.number().int().positive(),
+  budgetUsd: z.number().positive(),
+  allowedTools: z.array(z.string()),
+  disallowedTools: z.array(z.string()),
+  permissionProfile: z.string().min(1),
+  // FIXME[schema-sync]: keep in sync with canonical schema in src/sdk/workflow/workflow-definition.ts
+  nodeType: z.enum(["agent", "script"]).optional().default("agent"),
+  scriptKind: z.enum(["worktree", "create-branch", "pull-request"]).optional(),
+  passCheckRef: z.string().optional(),
+  scriptConfig: z.record(z.unknown()).optional(),
+});
 
-const WorkflowEdgeDefinitionSchema = z
-  .object({
-    from: z.string().min(1),
-    to: z.string().min(1),
-    onStatus: NodeStatusSchema,
-  })
-  .strict();
+const WorkflowEdgeDefinitionSchema = z.object({
+  from: z.string().min(1),
+  to: z.string().min(1),
+  onStatus: NodeStatusSchema,
+});
 
-const WorkflowDefinitionSchema = z
-  .object({
-    name: z.string().min(1),
-    initialNodeId: z.string().min(1),
-    nodes: z.array(WorkflowNodeDefinitionSchema).min(1),
-    edges: z.array(WorkflowEdgeDefinitionSchema),
-  })
-  .strict();
+const WorkflowDefinitionSchema = z.object({
+  name: z.string().min(1),
+  initialNodeId: z.string().min(1),
+  nodes: z.array(WorkflowNodeDefinitionSchema).min(1),
+  edges: z.array(WorkflowEdgeDefinitionSchema),
+});
 
 type WorkflowDefinition = z.infer<typeof WorkflowDefinitionSchema>;
 
@@ -50,6 +50,8 @@ export interface WorkflowBundle {
   definition: WorkflowDefinition;
   /** nodeId → skill.md text; empty string if the file is absent */
   skills: Record<string, string>;
+  /** true for built-in workflows that cannot be modified directly */
+  readonly?: boolean;
 }
 
 export interface WorkflowSummary {

@@ -6,6 +6,14 @@ import { fileURLToPath } from "node:url";
 import { listRuns, readRun, readStage } from "./artifacts.js";
 import { tailFile } from "./tail.js";
 import { listJsonWorkflows, readWorkflow, workflowExists, writeWorkflow } from "./workflow-io.js";
+import {
+  listAgents,
+  readAgent,
+  writeAgent,
+  deleteAgent,
+  agentExists,
+  type AgentDefinition,
+} from "./catalog-io.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,7 +22,10 @@ const studioDistDir = path.join(__dirname, "studio", "dist");
 
 // Resolve runs dir via the orchestrator's config so we stay in lockstep.
 const orchestratorRoot = path.resolve(__dirname, "..");
+// FIXME[workflow-io]: hardcoded filesystem path — make configurable via env var ORCH_WORKFLOWS_DIR
 const WORKFLOWS_DIR = path.join(orchestratorRoot, "src", "workflows");
+// FIXME[api-catalog]: hardcoded path — make configurable via env var ORCH_CATALOG_DIR
+const CATALOG_DIR = path.join(orchestratorRoot, "src", "catalog");
 const RUNS_DIR = process.env.ORCH_RUNS_DIR ?? path.join(orchestratorRoot, ".runs");
 
 const ARGS = process.argv.slice(2);
@@ -106,6 +117,7 @@ const server = createServer(async (req, res) => {
     }
 
     // GET /api/studio/workflows
+    // FIXME[workflow-io]: listing reads filesystem directly — replace with REST catalog service
     if (req.method === "GET" && pathname === "/api/studio/workflows") {
       const summaries = listJsonWorkflows(WORKFLOWS_DIR);
       const bundles = summaries
@@ -153,6 +165,9 @@ const server = createServer(async (req, res) => {
     m = pathname.match(/^\/api\/studio\/workflows\/([^/]+)$/);
     if (req.method === "PUT" && m) {
       const name = m[1]!;
+      if (!workflowExists(WORKFLOWS_DIR, name)) {
+        return sendJson(res, 404, { error: `workflow not found: ${name}` });
+      }
       let body: unknown;
       try {
         body = await readJsonBody(req);
@@ -170,6 +185,140 @@ const server = createServer(async (req, res) => {
         return sendJson(res, 422, { error: err instanceof Error ? err.message : String(err) });
       }
       return sendJson(res, 200, { name });
+    }
+
+    // DELETE /api/studio/workflows/:name
+    m = pathname.match(/^\/api\/studio\/workflows\/([^/]+)$/);
+    if (req.method === "DELETE" && m) {
+      const name = m[1]!;
+      if (!workflowExists(WORKFLOWS_DIR, name)) {
+        return sendJson(res, 404, { error: `workflow not found: ${name}` });
+      }
+      try {
+        const { rmSync } = await import("node:fs");
+        const { join } = await import("node:path");
+        rmSync(join(WORKFLOWS_DIR, name), { recursive: true, force: true });
+      } catch (err) {
+        return sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+      }
+      return sendJson(res, 204, null);
+    }
+
+    // ==========================================================================
+    // Studio API — /api/studio/agents/*
+    // ==========================================================================
+
+    // GET /api/studio/agents
+    if (req.method === "GET" && pathname === "/api/studio/agents") {
+      return sendJson(res, 200, { agents: listAgents(CATALOG_DIR) });
+    }
+
+    // GET /api/studio/agents/:role
+    m = pathname.match(/^\/api\/studio\/agents\/([^/]+)$/);
+    if (req.method === "GET" && m) {
+      const def = readAgent(CATALOG_DIR, m[1]!);
+      if (!def) return sendJson(res, 404, { error: `agent not found: ${m[1]}` });
+      return sendJson(res, 200, def);
+    }
+
+    // POST /api/studio/agents — create new
+    if (req.method === "POST" && pathname === "/api/studio/agents") {
+      let body: unknown;
+      try {
+        body = await readJsonBody(req);
+      } catch {
+        return sendJson(res, 400, { error: "invalid JSON body" });
+      }
+      const def = body as AgentDefinition;
+      if (!def.role || typeof def.role !== "string") {
+        return sendJson(res, 400, { error: "missing role" });
+      }
+      if (agentExists(CATALOG_DIR, def.role)) {
+        return sendJson(res, 409, { error: `agent already exists: ${def.role}` });
+      }
+      try {
+        writeAgent(CATALOG_DIR, def);
+      } catch (err) {
+        return sendJson(res, 422, { error: err instanceof Error ? err.message : String(err) });
+      }
+      return sendJson(res, 201, { role: def.role });
+    }
+
+    // PUT /api/studio/agents/:role — update existing
+    m = pathname.match(/^\/api\/studio\/agents\/([^/]+)$/);
+    if (req.method === "PUT" && m) {
+      const role = m[1]!;
+      if (!agentExists(CATALOG_DIR, role)) {
+        return sendJson(res, 404, { error: `agent not found: ${role}` });
+      }
+      let body: unknown;
+      try {
+        body = await readJsonBody(req);
+      } catch {
+        return sendJson(res, 400, { error: "invalid JSON body" });
+      }
+      const def = { ...(body as AgentDefinition), role };
+      try {
+        writeAgent(CATALOG_DIR, def);
+      } catch (err) {
+        return sendJson(res, 422, { error: err instanceof Error ? err.message : String(err) });
+      }
+      return sendJson(res, 200, { role });
+    }
+
+    // DELETE /api/studio/agents/:role
+    m = pathname.match(/^\/api\/studio\/agents\/([^/]+)$/);
+    if (req.method === "DELETE" && m) {
+      const role = m[1]!;
+      const existing = readAgent(CATALOG_DIR, role);
+      if (!existing) return sendJson(res, 404, { error: `agent not found: ${role}` });
+      if (existing.builtin) return sendJson(res, 403, { error: `cannot delete built-in agent: ${role}` });
+      try {
+        deleteAgent(CATALOG_DIR, role);
+      } catch (err) {
+        return sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+      }
+      return sendJson(res, 204, null);
+    }
+
+    // ==========================================================================
+    // Studio API — /api/studio/config
+    // ==========================================================================
+
+    // GET /api/studio/config
+    // FIXME[api-config]: passCheckRefs and scriptKinds are hardcoded here — pull from engine registry once catalog is a service
+    if (req.method === "GET" && pathname === "/api/studio/config") {
+      return sendJson(res, 200, {
+        tools: [
+          "Read", "Grep", "Glob", "WebFetch",
+          "Edit", "Write", "Bash", "NotebookEdit",
+          "mcp__linear__*", "mcp__plugin_figma_figma__*",
+        ],
+        roleColors: {
+          "business-analyst": "#e3b341",
+          engineer: "#f0883e",
+          "tech-lead": "#388bfd",
+          "product-owner": "#a371f7",
+          "pull-request-script": "#3fb950",
+          "create-branch-script": "#3fb950",
+          "worktree-script": "#8957e5",
+        },
+        statusColors: { Pass: "#3fb950", Fail: "#f85149", WaitUserInput: "#8b949e" },
+        permissionProfiles: ["view-only", "safe-write", "read-only", "engineer"],
+        passCheckRefs: [
+          { key: "linear.ba",       description: "Pass if BA done; WaitUserInput if unanswered questions; Fail if terminal" },
+          { key: "linear.tl",       description: "Pass if TL done; WaitUserInput if unanswered questions; Fail if terminal" },
+          { key: "linear.engineer", description: "Pass if Engineer done (Agent Done status); Fail if terminal" },
+          { key: "worktree",        description: "Pass if worktree + branch already exist; null to create them" },
+        ],
+        scriptKinds: ["worktree", "create-branch", "pull-request"],
+        nodeTypes: [
+          { value: "agent", label: "Agent" },
+          { value: "script", label: "Git: Worktree",      scriptKind: "worktree" },
+          { value: "script", label: "Git: Create Branch", scriptKind: "create-branch" },
+          { value: "script", label: "Git: Pull Request",  scriptKind: "pull-request" },
+        ],
+      });
     }
 
     // Anything else that's a plain GET falls back to the SPA shell so deep
@@ -381,8 +530,10 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
 
 // =============================================================================
 // Agent type catalogue (used by GET /api/studio/agent-types)
+// FIXME[api-catalog]: hardcoded list — replace with listAgents() from src/catalog/catalog-io.ts
 // =============================================================================
 
+// FIXME[api-catalog]: skill loaded from simple workflow nodes — should come from catalog/agents/<role>/skill.md
 function readSkill(nodeId: string): string {
   const p = path.join(WORKFLOWS_DIR, "simple", "nodes", nodeId, "skill.md");
   if (!existsSync(p)) return "";

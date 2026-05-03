@@ -1,0 +1,17 @@
+{
+  "role": "create-branch-script",
+  "label": "Git: Create Branch",
+  "color": "#3fb950",
+  "defaultNodeId": "create-branch",
+  "nodeType": "script",
+  "scriptKind": "create-branch",
+  "builtin": true,
+  "defaultConfig": {
+    "model": "script",
+    "maxTurns": 1,
+    "budgetUsd": 0.1,
+    "allowedTools": [],
+    "disallowedTools": [],
+    "permissionProfile": "safe-write"
+  }
+}

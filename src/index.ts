@@ -17,15 +17,24 @@ import { assertConfig, config } from "@/config";
 import { logger } from "@/util/logger";
 import { LinearClient } from "@/linear/linear-client";
 import { pollForNewIssues } from "@/polling/poller";
+import { registerDefaultPassChecks } from "@/catalog/register-default-checks.js";
+import { defaultWorkflow } from "@/workflows/default/workflow.js";
+import { simpleWorkflow } from "@/workflows/simple/workflow.js";
+
+// Register all default pass-check functions before any workflow can load.
+registerDefaultPassChecks();
 
 async function main(): Promise<void> {
-  // Discover workflow.json-based workflows and merge them in. Static workflows
-  // registered in WORKFLOWS take precedence on name collision.
+  // Discover workflow.json-based workflows and merge them in.
   const workflowsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "workflows");
   const dynamic = discoverDynamicWorkflows(workflowsDir);
   for (const [name, factory] of Object.entries(dynamic)) {
-    if (!(name in WORKFLOWS)) WORKFLOWS[name] = factory;
+    WORKFLOWS[name] = factory;
   }
+
+  // Hardcoded TypeScript workflows take precedence over any same-named JSON discovery.
+  WORKFLOWS["default"] = defaultWorkflow;
+  WORKFLOWS["simple"] = (runLog, cwd) => simpleWorkflow(runLog, cwd);
 
   const available = availableWorkflowNames().join(" | ");
   const program = new Command()
