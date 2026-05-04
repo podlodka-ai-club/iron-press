@@ -10,22 +10,31 @@ import {
   availableWorkflowNames,
   getWorkflow,
   discoverDynamicWorkflows,
+  type WorkflowFactory,
   type WorkflowState,
 } from "@/sdk/workflow";
 import { createRunLog } from "@/runs/run-log";
 import { assertConfig, config } from "@/config";
 import { logger } from "@/util/logger";
 import { LinearClient } from "@/linear/linear-client";
+import type { LinearIssue } from "@/linear/linear-contracts";
 import { pollForNewIssues } from "@/polling/poller";
-import { registerDefaultPassChecks } from "@/catalog/register-default-checks.js";
-import { defaultWorkflow } from "@/workflows/default/workflow.js";
-import { simpleWorkflow } from "@/workflows/simple/workflow.js";
-
-// Register all default pass-check functions before any workflow can load.
-registerDefaultPassChecks();
+import { prepareRepository } from "@/git/repo-manager";
 
 async function main(): Promise<void> {
-  // Discover workflow.json-based workflows and merge them in.
+  // Register built-in TypeScript workflows. Done here via dynamic import() so
+  // that workflow files (which import AgentNode, which imports from this SDK
+  // module) are loaded after all static module-level imports have settled,
+  // avoiding a circular-module initialisation race.
+  const [defaultMod, simpleMod] = await Promise.all([
+    import("@/workflows/default/workflow"),
+    import("@/workflows/simple/workflow"),
+  ]);
+  WORKFLOWS["default"] = defaultMod.defaultWorkflow as WorkflowFactory;
+  WORKFLOWS["simple"] = simpleMod.simpleWorkflow as WorkflowFactory;
+
+  // Discover workflow.json-based workflows and merge them in. Static workflows
+  // registered in WORKFLOWS take precedence on name collision.
   const workflowsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "workflows");
   const dynamic = discoverDynamicWorkflows(workflowsDir);
   for (const [name, factory] of Object.entries(dynamic)) {
@@ -33,8 +42,8 @@ async function main(): Promise<void> {
   }
 
   // Hardcoded TypeScript workflows take precedence over any same-named JSON discovery.
-  WORKFLOWS["default"] = defaultWorkflow;
-  WORKFLOWS["simple"] = (runLog, cwd) => simpleWorkflow(runLog, cwd);
+  WORKFLOWS["default"] = defaultMod.defaultWorkflow as WorkflowFactory;
+  WORKFLOWS["simple"] = simpleMod.simpleWorkflow as WorkflowFactory;
 
   const available = availableWorkflowNames().join(" | ");
   const program = new Command()
@@ -45,13 +54,13 @@ async function main(): Promise<void> {
       `workflow to run (${available}); defaults to "${DEFAULT_WORKFLOW}" when only an issue id is given`,
     )
     .argument("[issueId]", "Linear issue identifier, e.g. ENG-123")
-    .option("--cwd <path>", "working directory the SDK session runs in", process.cwd())
+    .option("--cwd <path>", "working directory the SDK session runs in")
     .option("--run-id <id>", "reuse an existing .runs/<id> directory (resumes stage counter)")
     .option("--poll", "poll for new issues and run workflows in a loop")
     .option("--resume <nodeId>", "resume a suspended run from the given node (requires --run-id)")
     .parse(process.argv);
 
-  const opts = program.opts<{ cwd: string; runId?: string; poll?: boolean; resume?: string }>();
+  const opts = program.opts<{ cwd?: string; runId?: string; poll?: boolean; resume?: string }>();
 
   // Handle polling mode
   if (opts.poll) {
@@ -93,19 +102,21 @@ async function main(): Promise<void> {
 
   assertConfig();
 
+  const cwd = opts.cwd ?? process.cwd();
+
   const runLog = createRunLog({
     runId: opts.runId,
     rootInput: issueId,
-    flags: { workflow: workflowName, cwd: opts.cwd },
+    flags: { workflow: workflowName, cwd },
     resume: Boolean(opts.runId),
   });
 
   logger.info(
-    { runId: runLog.runId, workflow: workflowName, issueId, cwd: opts.cwd },
+    { runId: runLog.runId, workflow: workflowName, issueId, cwd },
     "workflow starting",
   );
 
-  const workflow = factory(runLog, opts.cwd);
+  const workflow = factory(runLog, cwd);
   const engine = new GraphologyEngine<WorkflowState>();
   const workflowStatePath = path.join(runLog.runDir, "workflow-state.json");
 
@@ -129,9 +140,18 @@ async function main(): Promise<void> {
   }
 
   try {
-    const result = opts.resume
-      ? await engine.resume(workflow, opts.resume, initialState, {}, { runId: runLog.runId })
-      : await engine.run(workflow, initialState, {}, { runId: runLog.runId });
+    const engineHooks = {
+    onNodeEnter: (nodeId: string) => {
+      runLog.appendEvent("node_entered", { nodeId });
+    },
+    onNodeExit: (nodeId: string, status: string) => {
+      runLog.appendEvent("node_exited", { nodeId, status });
+    },
+  };
+
+  const result = opts.resume
+      ? await engine.resume(workflow, opts.resume, initialState, engineHooks, { runId: runLog.runId })
+      : await engine.run(workflow, initialState, engineHooks, { runId: runLog.runId });
 
     // Persist final state so a subsequent --resume can restore workflow-specific fields.
     writeFileSync(workflowStatePath, JSON.stringify(result.finalState, null, 2));
@@ -173,7 +193,26 @@ async function main(): Promise<void> {
   }
 }
 
-async function runPollingMode(cwd: string): Promise<void> {
+function resolveWorkflowForIssue(issue: LinearIssue): string {
+  const fallback = config.appConfig?.defaultWorkflow ?? DEFAULT_WORKFLOW;
+  const mapping = config.appConfig?.workflowMapping;
+  if (mapping) {
+    for (const label of issue.labels) {
+      const name = mapping[label];
+      if (name) {
+        try {
+          getWorkflow(name);
+          return name;
+        } catch {
+          logger.warn({ label, workflow: name }, "mapped workflow not found, skipping label");
+        }
+      }
+    }
+  }
+  return fallback;
+}
+
+async function runPollingMode(cwdOverride?: string): Promise<void> {
   const linearClient = new LinearClient(config.linearApiKey, logger);
 
   logger.info(
@@ -196,30 +235,59 @@ async function runPollingMode(cwd: string): Promise<void> {
         logger.info({ issueId: issue.id, issueTitle: issue.title }, "processing polled issue");
 
         try {
+          const workflowName = resolveWorkflowForIssue(issue);
+
+          let cwd: string;
+          if (cwdOverride) {
+            cwd = cwdOverride;
+          } else if (config.appConfig?.repository) {
+            logger.info(
+              { url: config.appConfig.repository.url },
+              "preparing repository",
+            );
+            cwd = prepareRepository(config.appConfig.repository);
+          } else {
+            throw new Error(
+              "No repository configured. Pass --cwd or set repository.url in iron-press.config.json",
+            );
+          }
+
           const runLog = createRunLog({
             rootInput: issue.id,
-            flags: { workflow: DEFAULT_WORKFLOW, cwd, polling: true },
+            flags: { workflow: workflowName, cwd, polling: true },
             resume: false,
           });
 
           logger.info(
-            { runId: runLog.runId, workflow: DEFAULT_WORKFLOW, issueId: issue.id },
+            { runId: runLog.runId, workflow: workflowName, issueId: issue.id, cwd },
             "workflow starting for polled issue",
           );
 
-          const factory = getWorkflow(DEFAULT_WORKFLOW);
-          const workflow = factory(runLog, cwd);
+          const factory = getWorkflow(workflowName);
+          const workflow = factory(runLog, cwd, {
+            baseBranch: config.appConfig?.repository?.baseBranch,
+            branchPrefix: config.appConfig?.repository?.branchPrefix,
+          });
           const engine = new GraphologyEngine<WorkflowState>();
+
+          const pollEngineHooks = {
+            onNodeEnter: (nodeId: string) => {
+              runLog.appendEvent("node_entered", { nodeId });
+            },
+            onNodeExit: (nodeId: string, status: string) => {
+              runLog.appendEvent("node_exited", { nodeId, status });
+            },
+          };
 
           const result = await engine.run(
             workflow,
             { issueId: issue.id, runId: runLog.runId },
-            {},
+            pollEngineHooks,
             { runId: runLog.runId },
           );
 
           runLog.appendEvent("run_finished", {
-            workflow: DEFAULT_WORKFLOW,
+            workflow: workflowName,
             finalStatus: result.finalStatus,
             exitReason: result.exitReason,
             history: result.history,
@@ -228,7 +296,7 @@ async function runPollingMode(cwd: string): Promise<void> {
           logger.info(
             {
               runId: runLog.runId,
-              workflow: DEFAULT_WORKFLOW,
+              workflow: workflowName,
               issueId: issue.id,
               finalStatus: result.finalStatus,
             },

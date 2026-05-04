@@ -38,6 +38,16 @@ graph LR
     Issue --> Workflow[Default Workflow]
 ```
 
+ - Polling-режим с автоматическим выбором workflow по лейблам Linear-задачи
+
+```mermaid
+graph LR
+    Poll[Poll Linear] --> Issue
+    Issue --> Selector[Label → Workflow Mapping]
+    Selector -->|label found| Mapped[Mapped Workflow]
+    Selector -->|no match| Default[Default Workflow]
+```
+
  - Простейщий Workflow без сложной ролевой модели
 
 ```mermaid

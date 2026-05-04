@@ -1,4 +1,4 @@
-import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync, type WriteStream } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, type WriteStream } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { config } from "../config.js";
@@ -130,25 +130,14 @@ function shortId(): string {
 }
 
 function computeStageCounter(runDir: string): number {
-  try {
-    const stagesDir = path.join(runDir, "stages");
-    if (!existsSync(stagesDir)) return 0;
-    const entries = readFileSync(stagesDir, "utf8"); // will throw on dir — use fs.readdirSync
-    return entries.length;
-  } catch {
-    try {
-      const fs = require("node:fs") as typeof import("node:fs");
-      const dirs = fs.readdirSync(path.join(runDir, "stages"));
-      let max = 0;
-      for (const d of dirs) {
-        const m = d.match(/^(\d+)-/);
-        if (m && m[1]) max = Math.max(max, Number(m[1]));
-      }
-      return max;
-    } catch {
-      return 0;
-    }
+  const stagesDir = path.join(runDir, "stages");
+  if (!existsSync(stagesDir)) return 0;
+  let max = 0;
+  for (const entry of readdirSync(stagesDir)) {
+    const m = entry.match(/^(\d+)-/);
+    if (m && m[1]) max = Math.max(max, Number(m[1]));
   }
+  return max;
 }
 
 // =============================================================================

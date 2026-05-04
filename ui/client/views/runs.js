@@ -127,7 +127,7 @@ function cardHtml(r) {
   }
 
   return `
-    <article class="run-card" data-run-id="${escapeHtml(r.runId)}">
+    <article class="run-card" data-run-id="${escapeHtml(r.runId)}" data-status="${escapeHtml(r.status ?? "unknown")}">
       <div class="run-card-head">
         <div class="run-card-heading">
           <div class="run-card-root">${escapeHtml(r.rootInput ?? "(unknown)")}</div>

@@ -72,7 +72,7 @@ export function stop() {
 function rootTitle() {
   const state = run.state ?? {};
   const issues = state.issues ?? {};
-  const rootInput = run.meta?.rootInput;
+  const rootInput = run.rootInput ?? run.meta?.rootInput;
   return rootInput && issues[rootInput]?.title ? issues[rootInput].title : "";
 }
 
@@ -100,6 +100,17 @@ function draw(root) {
           <div class="panel-head">Stages <span style="color:var(--muted); font-weight:400;">(${run.stages.length})</span></div>
           <div class="panel-body">
             <div class="stage-list" id="stage-list">${stagesHtml()}</div>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-bottom: 14px;">
+          <div class="panel-head">Workflow Graph</div>
+          <div class="panel-body" style="padding: 0;">
+            <iframe
+              src="/studio/run/${encodeURIComponent(run.runId)}?embed=1"
+              class="run-graph-iframe"
+              title="Live workflow graph"
+            ></iframe>
           </div>
         </div>
 

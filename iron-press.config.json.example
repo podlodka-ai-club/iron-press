@@ -1,0 +1,20 @@
+{
+  "defaultWorkflow": "simple",
+  "workflowMapping": {
+    "feature": "simple",
+    "bug": "sm"
+  },
+  "linear": {
+    "teamId": "YOUR_TEAM_ID",
+    "projectId": "YOUR_PROJECT_ID",
+    "pollIntervalMs": 30000,
+    "includeStatuses": ["Backlog"],
+    "excludeStatuses": ["Done", "Canceled"]
+  },
+  "repository": {
+    "url": "git@github.com:owner/repo.git",
+    "cloneDir": "/optional/absolute/path/to/clone/dir",
+    "baseBranch": "main",
+    "branchPrefix": "issue-"
+  }
+}

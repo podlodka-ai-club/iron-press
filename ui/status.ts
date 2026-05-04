@@ -16,9 +16,21 @@ export type StageStatus = "running" | "done" | "blocked" | "error" | "unknown";
 export function deriveRunStatus(
   meta: { startedAt?: string; finishedAt?: string; exitCode?: number } | null,
   eventTypes: string[],
+  events?: Array<{ type: string; data?: Record<string, unknown> }>,
 ): RunStatus {
   if (!meta && eventTypes.length === 0) return "unknown";
 
+  // Current engine events
+  if (eventTypes.includes("run_finished")) {
+    const finishedEvent = events?.findLast((e) => e.type === "run_finished");
+    const finalStatus = finishedEvent?.data?.finalStatus as string | undefined;
+    if (finalStatus === "Fail") return "error";
+    if (finalStatus === "WaitUserInput") return "blocked";
+    return "done";
+  }
+  if (eventTypes.includes("run_errored")) return "error";
+
+  // Legacy events (older orchestrator versions)
   if (eventTypes.includes("pipeline_complete")) return "done";
   if (eventTypes.includes("exit_idle")) return "done";
   if (eventTypes.includes("exit_blocked")) return "blocked";
@@ -41,17 +53,18 @@ export function deriveRunStatus(
     return "error";
   }
 
-  if (meta?.startedAt) return "running";
+  if (meta?.startedAt || eventTypes.includes("run_started") || eventTypes.includes("run_resumed")) return "running";
   return "unknown";
 }
 
 export function deriveStageStatus(
-  result: { status?: "done" | "blocked" | "failed" } | null,
+  result: { status?: string } | null,
 ): StageStatus {
   if (!result) return "running";
-  if (result.status === "done") return "done";
-  if (result.status === "blocked") return "blocked";
-  if (result.status === "failed") return "error";
+  const s = result.status;
+  if (s === "done" || s === "Pass") return "done";
+  if (s === "blocked" || s === "WaitUserInput") return "blocked";
+  if (s === "failed" || s === "Fail") return "error";
   return "unknown";
 }
 

@@ -13,11 +13,22 @@ import { loadWorkflowFromJson } from "./dynamic-loader.js";
 
 export type WorkflowState = { issueId: string; runId: string };
 
+export type WorkflowRunOptions = {
+  baseBranch?: string;
+  branchPrefix?: string;
+};
+
 export type WorkflowFactory<TState = WorkflowState> = (
   runLog: RunLog,
   cwd: string,
+  opts?: WorkflowRunOptions,
 ) => Workflow<TState>;
 
+// Static workflows are registered here by the CLI entry point at startup via
+// dynamic import(). This avoids a circular-module issue: workflow files import
+// AgentNode, which imports values from @/sdk/workflow (this module). Deferring
+// the workflow imports to runtime (after all static imports have resolved)
+// breaks the cycle without needing CJS require().
 export const WORKFLOWS: Record<string, WorkflowFactory> = {};
 
 /** Workflow used when the CLI is invoked without an explicit name. */

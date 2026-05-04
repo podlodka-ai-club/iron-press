@@ -17,7 +17,9 @@ interface PollingStateFile {
 export function loadPollingState(): PollingState {
   if (!existsSync(POLLING_STATE_PATH)) {
     return {
-      lastPollTime: new Date(0).toISOString(), // Start from epoch
+      lastPollTime: config.pollingLookbackMs
+        ? new Date(Date.now() - config.pollingLookbackMs).toISOString()
+        : new Date(Date.now()).toISOString(), // Start from epoch
       processedIssueIds: new Set(),
     };
   }
@@ -32,7 +34,9 @@ export function loadPollingState(): PollingState {
   } catch (e) {
     console.error("Failed to load polling state, starting fresh:", e);
     return {
-      lastPollTime: new Date(0).toISOString(),
+      lastPollTime: config.pollingLookbackMs
+        ? new Date(Date.now() - config.pollingLookbackMs).toISOString()
+        : new Date(0).toISOString(),
       processedIssueIds: new Set(),
     };
   }

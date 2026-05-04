@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import type { WorkflowBundle } from "./types.js";
+import type { AgentTypeInfo, WorkflowBundle } from "./types.js";
 import { fetchWorkflow, fetchWorkflows } from "./api.js";
 import { Canvas } from "./components/Canvas.js";
 import { NodeLibrary } from "./components/NodeLibrary.js";
 import { Inspector } from "./components/Inspector.js";
 import { Toolbar } from "./components/Toolbar.js";
 import { ValidationBanner } from "./components/ValidationBanner.js";
+import { RunViewer } from "./components/RunViewer.js";
 import { useWorkflowStore } from "./store/workflowStore.js";
 import { useRoute } from "./routing.js";
 import type { ValidationResult } from "./validate.js";
@@ -14,6 +15,28 @@ export function App() {
   const { route } = useRoute();
   const loadBundle = useWorkflowStore((s) => s.loadBundle);
 
+  // Run visualization mode — render RunViewer full-screen
+  if (route.runId) {
+    const isEmbedded = new URLSearchParams(window.location.search).get("embed") === "1";
+    return (
+      <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#0d1117" }}>
+        {!isEmbedded && (
+          <div style={{ height: 40, borderBottom: "1px solid #21262d", display: "flex", alignItems: "center", padding: "0 16px", gap: 12, flexShrink: 0, background: "#161b22" }}>
+            <a href="/" style={{ fontSize: 12, color: "#6e7681", textDecoration: "none" }}>← Monitor</a>
+            <span style={{ color: "#30363d" }}>|</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#e6edf3" }}>iron-press Studio</span>
+            <span style={{ color: "#30363d" }}>|</span>
+            <span style={{ fontSize: 12, color: "#8b949e" }}>Run Visualization</span>
+          </div>
+        )}
+        <div style={{ flex: 1, overflow: "hidden" }}>
+          <RunViewer runId={route.runId} embed={isEmbedded} />
+        </div>
+      </div>
+    );
+  }
+
+  const [agentTypes, setAgentTypes] = useState<AgentTypeInfo[]>([]);
   const [workflows, setWorkflows] = useState<WorkflowBundle[]>([]);
   const [validation, setValidation] = useState<ValidationResult>({ valid: true, errors: [] });
   const [toast, setToast] = useState<{ msg: string; error: boolean } | null>(null);

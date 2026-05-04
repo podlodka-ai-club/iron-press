@@ -1,5 +1,6 @@
 import { execSync } from "node:child_process";
 import { WorkflowBuilder, type Workflow } from "@/sdk/workflow";
+import { type WorkflowRunOptions } from "@/sdk/workflow/registry";
 import type { RunLog } from "@/runs/run-log";
 import { PullRequestNode } from "@/sdk/node/pull-request-node";
 import { CreateBranchNode } from "@/sdk/node/create-branch-node";
@@ -42,11 +43,11 @@ function parseGitRemote(cwd: string): { owner: string; repo: string } {
 export function simpleWorkflow(
   runLog: RunLog,
   cwd: string,
-  overrides: Partial<Omit<WorkflowConfig, "cwd">> = {},
+  opts: WorkflowRunOptions = {},
 ): Workflow<SimpleWorkflowState> {
   const wfConfig: WorkflowConfig = {
     ...defaultConfig,
-    ...overrides,
+    ...opts,
     cwd,
   };
   const { owner, repo } = parseGitRemote(wfConfig.cwd);
@@ -70,6 +71,7 @@ export function simpleWorkflow(
           },
         },
         wfConfig.cwd,
+        runLog,
       ),
     )
     .addNode(
@@ -94,6 +96,7 @@ export function simpleWorkflow(
           }),
         },
         githubClient,
+        runLog,
       ),
     )
     .addEdge("ba", "create-branch", "Pass")
