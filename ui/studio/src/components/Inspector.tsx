@@ -30,7 +30,7 @@ const HR: React.CSSProperties = {
 };
 
 const CONTAINER: React.CSSProperties = {
-  width: 300,
+  width: 360,
   flexShrink: 0,
   background: "#161b22",
   borderLeft: "1px solid #21262d",
@@ -228,15 +228,24 @@ export function Inspector() {
         <hr style={HR} />
 
         {/* Pass-Check — prominent section with dropdown */}
-        <div style={SECTION_LABEL}>Pass-Check</div>
-        <div style={{ marginBottom: 14 }}>
+        <div
+          style={{
+            marginBottom: 16,
+            background: "rgba(56, 139, 253, 0.05)",
+            border: "1px solid rgba(56, 139, 253, 0.2)",
+            borderRadius: 8,
+            padding: "12px",
+          }}
+        >
+          <div style={{ ...SECTION_LABEL, color: "#79c0ff", marginBottom: 10 }}>Pass-Check Flow</div>
           <select
             className="studio-select"
+            style={{ borderColor: "rgba(56, 139, 253, 0.3)" }}
             value={data.passCheckRef ?? ""}
             disabled={ro}
             onChange={(e) => updateNodeData(node.id, { passCheckRef: e.target.value || undefined })}
           >
-            <option value="">— none —</option>
+            <option value="">— No automatic decision —</option>
             {passCheckRefs.map((p) => (
               <option key={p.key} value={p.key}>{p.key}</option>
             ))}
@@ -244,13 +253,13 @@ export function Inspector() {
           {selectedPassCheck && (
             <div
               style={{
-                marginTop: 8,
-                background: "#0d1117",
-                border: "1px solid #21262d",
+                marginTop: 10,
+                background: "rgba(13, 17, 23, 0.5)",
+                border: "1px solid rgba(56, 139, 253, 0.2)",
                 borderRadius: 6,
-                padding: "8px 10px",
+                padding: "10px",
                 fontSize: 11,
-                color: "#8b949e",
+                color: "#c9d1d9",
                 lineHeight: 1.5,
               }}
             >
@@ -258,8 +267,8 @@ export function Inspector() {
             </div>
           )}
           {!data.passCheckRef && (
-            <div style={{ fontSize: 10, color: "#6e7681", marginTop: 6 }}>
-              No pass-check — node always runs execute()
+            <div style={{ fontSize: 10, color: "#8b949e", marginTop: 8 }}>
+              Execution flows directly to the next node.
             </div>
           )}
         </div>

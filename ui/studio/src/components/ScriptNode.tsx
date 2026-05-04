@@ -105,6 +105,19 @@ function ScriptNodeComponent({ id, data, selected }: NodeProps<ScriptNodeType>) 
           border: `2px solid ${nodeBg(selected)}`,
         }}
       />
+      <Handle
+        title="Next"
+        type="source"
+        id="Pass"
+        position={Position.Right}
+        style={{
+          background: "#8b949e",
+          width: HANDLE_SIZE,
+          height: HANDLE_SIZE,
+          right: -HANDLE_HALF,
+          border: `2px solid ${nodeBg(selected)}`,
+        }}
+      />
 
       {/* Header */}
       <div
@@ -134,23 +147,6 @@ function ScriptNodeComponent({ id, data, selected }: NodeProps<ScriptNodeType>) 
         >
           {data.label}
         </span>
-        {passCheckLabel && (
-          <span
-            title={`passCheck: ${data.passCheckRef}`}
-            style={{
-              fontSize: 9,
-              color: "#8b949e",
-              background: "#161b22",
-              border: "1px solid #30363d",
-              borderRadius: 10,
-              padding: "1px 5px",
-              flexShrink: 0,
-              letterSpacing: "0.02em",
-            }}
-          >
-            {passCheckLabel}
-          </span>
-        )}
         {data.isInitial && (
           <span style={{ fontSize: 10, color: "#3fb950", fontWeight: 700, flexShrink: 0 }}>▶</span>
         )}
@@ -158,7 +154,12 @@ function ScriptNodeComponent({ id, data, selected }: NodeProps<ScriptNodeType>) 
       </div>
 
       {/* Body */}
-      <div style={{ padding: "8px 12px 10px" }}>
+      <div style={{ padding: "8px 12px 10px", display: "flex", flexDirection: "column", gap: 8 }}>
+        {passCheckLabel && (
+          <div style={{ background: "rgba(56, 139, 253, 0.1)", padding: "4px 8px", borderRadius: 4, fontSize: 10, color: "#79c0ff", border: "1px solid rgba(56, 139, 253, 0.3)", display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ color: "#388bfd" }}>✓</span> {passCheckLabel}
+          </div>
+        )}
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           <span
             style={{
@@ -180,46 +181,7 @@ function ScriptNodeComponent({ id, data, selected }: NodeProps<ScriptNodeType>) 
         </div>
       </div>
 
-      {/* Footer — Pass and Fail handles only */}
-      <div
-        style={{
-          display: "flex",
-          borderTop: "1px solid #30363d",
-          background: headerBg,
-          position: "relative",
-          borderBottomLeftRadius: 8,
-          borderBottomRightRadius: 8,
-        }}
-      >
-        <div
-          style={{
-            flex: 1,
-            position: "relative",
-            textAlign: "center",
-            padding: "8px 0",
-            borderRight: "1px solid #30363d",
-          }}
-        >
-          <span style={{ fontSize: 11, fontWeight: 600, color: STATUS_COLORS.Fail }}>Fail</span>
-          <Handle
-            title="Fail"
-            type="source"
-            id="Fail"
-            position={Position.Bottom}
-            style={{ width: HANDLE_SIZE, height: HANDLE_SIZE, background: STATUS_COLORS.Fail, border: `2px solid ${headerBg}`, bottom: -HANDLE_HALF }}
-          />
-        </div>
-        <div style={{ flex: 1, position: "relative", textAlign: "center", padding: "8px 0" }}>
-          <span style={{ fontSize: 11, fontWeight: 600, color: STATUS_COLORS.Pass }}>Pass</span>
-          <Handle
-            title="Pass"
-            type="source"
-            id="Pass"
-            position={Position.Bottom}
-            style={{ width: HANDLE_SIZE, height: HANDLE_SIZE, background: STATUS_COLORS.Pass, border: `2px solid ${headerBg}`, bottom: -HANDLE_HALF }}
-          />
-        </div>
-      </div>
+
     </div>
   );
 }

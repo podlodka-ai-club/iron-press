@@ -306,10 +306,14 @@ const server = createServer(async (req, res) => {
         statusColors: { Pass: "#3fb950", Fail: "#f85149", WaitUserInput: "#8b949e" },
         permissionProfiles: ["view-only", "safe-write", "read-only", "engineer"],
         passCheckRefs: [
-          { key: "linear.ba",       description: "Pass if BA done; WaitUserInput if unanswered questions; Fail if terminal" },
-          { key: "linear.tl",       description: "Pass if TL done; WaitUserInput if unanswered questions; Fail if terminal" },
-          { key: "linear.engineer", description: "Pass if Engineer done (Agent Done status); Fail if terminal" },
-          { key: "worktree",        description: "Pass if worktree + branch already exist; null to create them" },
+          { key: "linear.ba",             description: "Pass if BA done; WaitUserInput if unanswered questions; Fail if terminal" },
+          { key: "linear.tl",             description: "Pass if TL done; WaitUserInput if unanswered questions; Fail if terminal" },
+          { key: "linear.engineer",       description: "Pass if Engineer done (Agent Done status); Fail if terminal" },
+          { key: "worktree",              description: "Pass if worktree + branch already exist; null to create them" },
+          { key: "linear.ba.idempotency", description: "Pass if BA AgentImpl already populated; no WaitUserInput gate (used in 6-node flow)" },
+          { key: "linear.tl.idempotency", description: "Pass if TL RepoIssue already populated; no WaitUserInput gate (used in 6-node flow)" },
+          { key: "ba-check-comments",     description: "Run if question thread exists on AgentImpl; Pass (skip) if none" },
+          { key: "tl-check-comments",     description: "Run if question thread exists on RepoIssue; Pass (skip) if none" },
         ],
         scriptKinds: ["worktree", "create-branch", "pull-request"],
         nodeTypes: [

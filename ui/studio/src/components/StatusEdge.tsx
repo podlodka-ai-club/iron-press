@@ -40,30 +40,10 @@ export function StatusEdge({
         id={id} 
         path={edgePath} 
         style={{ 
-          stroke: color, 
+          stroke: "#8b949e", 
           strokeWidth: 2,
-          strokeDasharray: isWait ? "5, 5" : "none" 
         }} 
       />
-      <EdgeLabelRenderer>
-        <div
-          className="nodrag nopan"
-          style={{
-            position: "absolute",
-            transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
-            background: "#161b22",
-            border: `1px solid ${color}`,
-            color,
-            padding: "2px 7px",
-            borderRadius: 4,
-            fontSize: 10,
-            fontWeight: 700,
-            pointerEvents: "none",
-          }}
-        >
-          {isWait ? "Wait/Decide" : status}
-        </div>
-      </EdgeLabelRenderer>
     </>
   );
 }

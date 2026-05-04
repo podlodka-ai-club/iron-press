@@ -75,7 +75,6 @@ interface NodeHeaderProps {
 
 function NodeHeader({ id, data, roleColor, selected }: NodeHeaderProps) {
   const headerBg = nodeHeaderBg(selected);
-  const passCheckLabel = data.passCheckRef ? data.passCheckRef.split(".")[0] : null;
   return (
     <div
       style={{
@@ -103,27 +102,6 @@ function NodeHeader({ id, data, roleColor, selected }: NodeHeaderProps) {
       >
         {data.label}
       </span>
-      {passCheckLabel && (
-        <span
-          title={`passCheck: ${data.passCheckRef}`}
-          style={{
-            fontSize: 9,
-            color: "#8b949e",
-            background: "#161b22",
-            border: "1px solid #30363d",
-            borderRadius: 10,
-            padding: "1px 5px",
-            flexShrink: 0,
-            maxWidth: 72,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            letterSpacing: "0.02em",
-          }}
-        >
-          {passCheckLabel}
-        </span>
-      )}
       {data.isInitial && (
         <span style={{ fontSize: 10, color: "#3fb950", fontWeight: 700, flexShrink: 0 }}>▶</span>
       )}
@@ -138,10 +116,29 @@ interface NodeBodyProps {
 }
 
 function NodeBody({ data, isScript }: NodeBodyProps) {
+  const passCheckLabel = data.passCheckRef ? data.passCheckRef.split(".")[0] : null;
+
   if (isScript) {
     return (
-      <div style={{ padding: "8px 12px 10px" }}>
-        <div style={{ fontSize: 12, color: "#c9d1d9", fontStyle: "italic", textAlign: "center", marginTop: 8 }}>
+      <div style={{ padding: "8px 12px 10px", display: "flex", flexDirection: "column", gap: 8 }}>
+        {passCheckLabel && (
+          <div style={{
+            alignSelf: "flex-start",
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+            padding: "2px 6px",
+            background: "#161b22",
+            border: "1px solid #30363d",
+            borderRadius: 4,
+            fontSize: 10,
+            color: "#8b949e",
+          }}>
+            <span style={{ fontSize: 10, color: "#6e7681" }}>◇</span>
+            <span>{passCheckLabel}</span>
+          </div>
+        )}
+        <div style={{ fontSize: 12, color: "#c9d1d9", fontStyle: "italic", textAlign: "center", marginTop: 4 }}>
           Script Execution
         </div>
       </div>
@@ -149,26 +146,45 @@ function NodeBody({ data, isScript }: NodeBodyProps) {
   }
 
   return (
-    <div style={{ padding: "8px 12px 10px" }}>
-      <div style={{ fontSize: 12, color: "#c9d1d9", marginBottom: 2 }}>{data.model}</div>
-      <div style={{ fontSize: 12, color: "#8b949e", marginBottom: 8 }}>
-        {data.maxTurns} turns · ${data.budgetUsd}
-      </div>
-      <span
-        style={{
-          display: "inline-block",
-          padding: "2px 7px",
+    <div style={{ padding: "8px 12px 10px", display: "flex", flexDirection: "column", gap: 8 }}>
+      {passCheckLabel && (
+        <div style={{
+          alignSelf: "flex-start",
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+          padding: "2px 6px",
           background: "#161b22",
           border: "1px solid #30363d",
-          borderRadius: 12,
+          borderRadius: 4,
           fontSize: 10,
-          fontWeight: 500,
-          color: data.permissionProfile === "view-only" ? "#8b949e" : "#3fb950",
-          letterSpacing: "0.02em",
-        }}
-      >
-        {data.permissionProfile}
-      </span>
+          color: "#8b949e",
+        }}>
+          <span style={{ fontSize: 10, color: "#6e7681" }}>◇</span>
+          <span>{passCheckLabel}</span>
+        </div>
+      )}
+      <div>
+        <div style={{ fontSize: 12, color: "#c9d1d9", marginBottom: 2 }}>{data.model}</div>
+        <div style={{ fontSize: 12, color: "#8b949e", marginBottom: 8 }}>
+          {data.maxTurns} turns · ${data.budgetUsd}
+        </div>
+        <span
+          style={{
+            display: "inline-block",
+            padding: "2px 7px",
+            background: "#161b22",
+            border: "1px solid #30363d",
+            borderRadius: 12,
+            fontSize: 10,
+            fontWeight: 500,
+            color: data.permissionProfile === "view-only" ? "#8b949e" : "#3fb950",
+            letterSpacing: "0.02em",
+          }}
+        >
+          {data.permissionProfile}
+        </span>
+      </div>
     </div>
   );
 }
@@ -177,93 +193,7 @@ interface NodeFooterProps {
   selected: boolean;
 }
 
-function NodeFooter({ selected }: NodeFooterProps) {
-  const headerBg = nodeHeaderBg(selected);
-  const handleBorder = `2px solid ${headerBg}`;
-  return (
-    <div
-      style={{
-        display: "flex",
-        borderTop: "1px solid #30363d",
-        background: headerBg,
-        position: "relative",
-        borderBottomLeftRadius: 8,
-        borderBottomRightRadius: 8,
-      }}
-    >
-      <div
-        style={{
-          flex: 1,
-          position: "relative",
-          textAlign: "center",
-          padding: "8px 0",
-          borderRight: "1px solid #30363d",
-        }}
-      >
-        <span style={{ fontSize: 11, fontWeight: 600, color: STATUS_COLORS.Fail }}>Fail</span>
-        <Handle
-          title="Fail"
-          type="source"
-          id="Fail"
-          position={Position.Bottom}
-          style={{ width: HANDLE_SIZE, height: HANDLE_SIZE, background: STATUS_COLORS.Fail, border: handleBorder, bottom: -HANDLE_HALF }}
-        />
-      </div>
 
-      <div style={{ flex: 1, position: "relative", textAlign: "center", padding: "8px 0" }}>
-        <span style={{ fontSize: 11, fontWeight: 600, color: STATUS_COLORS.Pass }}>Pass</span>
-        <Handle
-          title="Pass"
-          type="source"
-          id="Pass"
-          position={Position.Bottom}
-          style={{ width: HANDLE_SIZE, height: HANDLE_SIZE, background: STATUS_COLORS.Pass, border: handleBorder, bottom: -HANDLE_HALF }}
-        />
-      </div>
-
-      <WaitDecider />
-    </div>
-  );
-}
-
-function WaitDecider() {
-  // A rotated diamond that acts as the WaitUserInput source handle.
-  // Positioned absolutely to break out of the footer's top-right corner.
-  return (
-    <div
-      title="Decider (WaitUserInput)"
-      style={{
-        position: "absolute",
-        right: -16,
-        top: -16,
-        width: 32,
-        height: 32,
-        background: "rgba(255, 255, 255, 0.05)",
-        border: "1px dashed #6e7681",
-        transform: "rotate(45deg)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.5)",
-        zIndex: 10,
-      }}
-    >
-      <div style={{ width: 8, height: 8, background: "#8b949e", borderRadius: "50%" }} />
-      <Handle
-        type="source"
-        id="WaitUserInput"
-        position={Position.Right}
-        style={{
-          opacity: 0,
-          width: 32,
-          height: 32,
-          transform: "rotate(-45deg)", // counter-rotates the hitbox back to square
-          cursor: "crosshair",
-        }}
-      />
-    </div>
-  );
-}
 
 // ─── MAIN COMPONENT ─────────────────────────────────────────────────────────
 
@@ -303,9 +233,21 @@ function AgentNodeComponent({ id, data, selected }: NodeProps<AgentNodeType>) {
           border: `2px solid ${nodeBg(selected)}`,
         }}
       />
+      <Handle
+        title="Next"
+        type="source"
+        id="Pass"
+        position={Position.Right}
+        style={{
+          background: "#8b949e",
+          width: HANDLE_SIZE,
+          height: HANDLE_SIZE,
+          right: -HANDLE_HALF,
+          border: `2px solid ${nodeBg(selected)}`,
+        }}
+      />
       <NodeHeader id={id} data={data} roleColor={roleColor} selected={selected} />
       <NodeBody data={data} isScript={isScript} />
-      <NodeFooter selected={selected} />
     </div>
   );
 }
